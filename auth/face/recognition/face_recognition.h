@@ -20,6 +20,9 @@ class FaceRecognition {
  public:
   FaceRecognition(const std::string& ckpt, int imgsz = 112, const float threshold = 0.50);
 
+  std::vector<float> embedding(const ImageRGB& image);
+  MatchResult matchEmbeddings(const std::vector<float>& first, const std::vector<float>& second);
+
   MatchResult match(const ImageRGB& image1, const ImageRGB& image2);
 
  private:

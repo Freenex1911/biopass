@@ -4,6 +4,7 @@ pub mod face;
 pub mod face_session;
 pub mod fingerprint;
 pub mod fingerprint_ffi;
+mod helper_io;
 pub mod models;
 pub mod paths;
 pub mod system;
@@ -25,7 +26,7 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -82,6 +83,11 @@ pub fn run() {
             delete_model,
             rename_model
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    app.run(|_, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            face_session::cleanup_preview();
+        }
+    });
 }

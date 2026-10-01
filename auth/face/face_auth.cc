@@ -55,7 +55,7 @@ bool FaceAuth::ensureModelsLoaded() {
 }
 
 bool FaceAuth::loadModels() {
-  if (detector_ && recognizer_) {
+  if (detector_ && recognizer_ && (!face_config_.anti_spoofing.enable || protection_)) {
     return true;
   }
 
@@ -97,6 +97,18 @@ bool FaceAuth::loadModels() {
     return false;
   }
 
+  if (face_config_.anti_spoofing.enable && !protection_) {
+    try {
+      const auto path = model_registry_.resolveModelPath(face_config_.anti_spoofing.model.model_id);
+      if (!path)
+        return false;
+      protection_ = std::make_unique<FaceAntiSpoofing>(*path, 128,
+                                                       face_config_.anti_spoofing.model.threshold);
+    } catch (const std::exception& e) {
+      spdlog::error("FaceAuth: Could not load protection model: {}", e.what());
+      return false;
+    }
+  }
   return true;
 }
 
@@ -105,12 +117,23 @@ void FaceAuth::beginAuthenticationSession() {
     camera_session_ = openCameraSession(face_config_.camera);
   }
   ensureIrSession();
-  ensureModelsLoaded();
+  if (ensureModelsLoaded())
+    prepareEnrolledFaces();
+}
+
+void FaceAuth::prepareEnrolledFaces() {
+  if (enrolled_faces_prepared_)
+    return;
+  enrolled_faces_prepared_ = true;
+  for (const auto& path : biopass::listFaces(username_))
+    enrolled_faces_.push_back({path, {}, false});
 }
 
 void FaceAuth::endAuthenticationSession() {
   ir_camera_session_.reset();
   camera_session_.reset();
+  enrolled_faces_.clear();
+  enrolled_faces_prepared_ = false;
 }
 
 AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig& config,
@@ -129,14 +152,14 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
     return AuthResult::Retry;
   }
 
-  std::vector<std::string> enrolledFaces = biopass::listFaces(username);
-  if (enrolledFaces.empty()) {
-    spdlog::error("FaceAuth: No face enrolled for user {}, skipping", username);
+  if (!ensureModelsLoaded()) {
+    spdlog::error("FaceAuth: Models not available for user {}, skipping", username);
     return AuthResult::Unavailable;
   }
 
-  if (!ensureModelsLoaded()) {
-    spdlog::error("FaceAuth: Models not available for user {}, skipping", username);
+  prepareEnrolledFaces();
+  if (enrolled_faces_.empty() || username != username_) {
+    spdlog::debug("FaceAuth: No usable enrolled faces for user, skipping");
     return AuthResult::Unavailable;
   }
 
@@ -151,6 +174,8 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
     return AuthResult::Retry;
   }
 
+  if (cancel_signal && cancel_signal->load())
+    return AuthResult::Failure;
   std::vector<Detection> detectedImages = detector_->inference(loginFace);
   if (detectedImages.empty()) {
     spdlog::error("FaceAuth: No face detected");
@@ -168,7 +193,7 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
   }
 
   if (!checkAntiSpoof(face_config_, username, face, config, model_registry_, detector_.get(),
-                      ir_camera_session_.get())) {
+                      ir_camera_session_.get(), protection_.get(), cancel_signal)) {
     spdlog::warn("FaceAuth: Anti-spoofing failed — returning Failure (no retry allowed)");
     // Always tear down the IR session so a subsequent call cannot reuse a
     // partially-warmed camera to bypass the check.
@@ -176,24 +201,32 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
     return AuthResult::Failure;
   }
 
-  // Match against all enrolled faces — succeed if any match.
-  spdlog::debug("FaceAuth: Recognition | threshold={:.3f} enrolled_count={}",
-                face_config_.recognition.threshold, enrolledFaces.size());
-  for (const auto& facePath : enrolledFaces) {
-    ImageRGB preparedFace = readImage(facePath);
-    if (preparedFace.empty()) {
-      spdlog::warn("FaceAuth: Recognition | could not load enrolled image: {}", facePath);
+  if (cancel_signal && cancel_signal->load())
+    return AuthResult::Failure;
+  // One live embedding per attempt; enrolled embeddings are reused until the session ends.
+  const auto live_embedding = recognizer_->embedding(face);
+  for (auto& enrolled : enrolled_faces_) {
+    if (cancel_signal && cancel_signal->load())
+      return AuthResult::Failure;
+    // Prepare only faces actually compared. Loading every enrollment up front
+    // would slow a successful first match when many photos are enrolled.
+    if (!enrolled.prepared) {
+      enrolled.prepared = true;
+      try {
+        const auto image = readImage(enrolled.path);
+        if (!image.empty())
+          enrolled.embedding = recognizer_->embedding(image);
+      } catch (const std::exception& e) {
+        spdlog::warn("FaceAuth: Could not prepare enrolled face '{}': {}", enrolled.path, e.what());
+      }
+    }
+    if (enrolled.embedding.empty())
       continue;
-    }
-
-    MatchResult match = recognizer_->match(preparedFace, face);
+    const MatchResult match = recognizer_->matchEmbeddings(enrolled.embedding, live_embedding);
     spdlog::debug("FaceAuth: Recognition | face='{}' score={:.4f} threshold={:.3f} similar={}",
-                  facePath, match.dist, face_config_.recognition.threshold, match.similar);
-    if (match.similar) {
-      spdlog::debug("FaceAuth: Recognition PASSED | matched face='{}' score={:.4f}", facePath,
-                    match.dist);
+                  enrolled.path, match.dist, face_config_.recognition.threshold, match.similar);
+    if (match.similar)
       return AuthResult::Success;
-    }
   }
 
   if (config.debug) {

@@ -162,6 +162,24 @@ export function StrategyConfig() {
             </div>
           )}
         </div>
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div className="grid gap-1">
+            <Label htmlFor="auth-status">GNOME sign-in hints</Label>
+            <p className="text-xs text-muted-foreground">
+              Show a camera or fingerprint hint during longer unlock attempts.
+              GNOME may keep the hint visible briefly before unlocking.
+            </p>
+          </div>
+          <Switch
+            id="auth-status"
+            checked={strategyConfig.show_auth_status}
+            onCheckedChange={(checked) =>
+              setValue("strategy.show_auth_status", checked, {
+                shouldDirty: true,
+              })
+            }
+          />
+        </div>
         <details className="rounded-lg border p-4">
           <summary className="cursor-pointer text-sm font-medium">
             Troubleshooting & service exclusions
@@ -176,7 +194,7 @@ export function StrategyConfig() {
                   Verbose Debug Logging
                 </Label>
                 <p className="text-xs text-muted-foreground max-w-100">
-                  Enable detailed console output for authentication methods.
+                  Write detailed authentication logs to your BioPass log folder.
                   Useful for troubleshooting.
                 </p>
               </div>

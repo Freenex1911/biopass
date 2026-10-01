@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <future>
 #include <memory>
 #include <thread>
@@ -31,6 +32,7 @@ class AuthManager {
   void addMethod(std::unique_ptr<IAuthMethod> method);
   void setMode(ExecutionMode mode);
   void setConfig(const AuthConfig &config);
+  void setStatusCallback(std::function<void(const std::string &)> callback);
   int authenticate(const std::string &username);
 
  private:
@@ -40,6 +42,7 @@ class AuthManager {
   std::vector<std::unique_ptr<IAuthMethod>> methods_;
   ExecutionMode mode_ = ExecutionMode::Parallel;
   AuthConfig config_;
+  std::function<void(const std::string &)> status_callback_;
 };
 
 }  // namespace biopass

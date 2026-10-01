@@ -29,6 +29,9 @@ void AuthManager::addMethod(std::unique_ptr<IAuthMethod> method) {
 
 void AuthManager::setMode(ExecutionMode mode) { this->mode_ = mode; }
 void AuthManager::setConfig(const AuthConfig& config) { this->config_ = config; }
+void AuthManager::setStatusCallback(std::function<void(const std::string&)> callback) {
+  status_callback_ = std::move(callback);
+}
 
 int AuthManager::authenticate(const std::string& username) {
   if (this->methods_.empty()) {
@@ -61,6 +64,8 @@ int AuthManager::runSequential(const std::string& username) {
       continue;
     }
 
+    if (status_callback_)
+      status_callback_(method->name());
     method->beginAuthenticationSession();
     MethodSessionGuard session_guard(*method);
 
@@ -77,6 +82,8 @@ int AuthManager::runSequential(const std::string& username) {
         spdlog::debug("AuthManager: Trying {} authentication", method->name());
       }
 
+      if (status_callback_)
+        status_callback_(method->name());
       result = method->authenticate(username, this->config_);
       attempts++;
 
@@ -124,8 +131,11 @@ int AuthManager::runParallel(const std::string& username) {
       continue;
     }
 
-    futures.push_back(std::async(
-        std::launch::async, [&method, &username, &config = this->config_, &success_found]() {
+    futures.push_back(
+        std::async(std::launch::async, [&method, &username, &config = this->config_,
+                                        &status = this->status_callback_, &success_found]() {
+          if (status)
+            status(method->name());
           method->beginAuthenticationSession();
           MethodSessionGuard session_guard(*method);
 
@@ -141,11 +151,18 @@ int AuthManager::runParallel(const std::string& username) {
             if (attempts > 0) {
               spdlog::debug("AuthManager: Retrying {} (parallel attempt {})", method->name(),
                             attempts + 1);
-              std::this_thread::sleep_for(std::chrono::milliseconds(method->getRetryDelayMs()));
+              const auto deadline = std::chrono::steady_clock::now() +
+                                    std::chrono::milliseconds(method->getRetryDelayMs());
+              while (!success_found.load() && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             } else {
               spdlog::debug("AuthManager: Starting {} authentication (parallel)", method->name());
             }
 
+            if (success_found.load())
+              return AuthResult::Failure;
+            if (status)
+              status(method->name());
             result = method->authenticate(username, config, &success_found);
             attempts++;
           } while (retry_strategy.shouldRetry(result, attempts) && !success_found.load());

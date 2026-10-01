@@ -40,9 +40,11 @@ std::string user_data_dir(const std::string& username) {
 }
 
 BiopassConfig readConfig(const std::string& username) {
-  BiopassConfig config;
+  return readConfigFile(getConfigPath(username));
+}
 
-  std::string config_path = getConfigPath(username);
+BiopassConfig readConfigFile(const std::string& config_path) {
+  BiopassConfig config;
 
   try {
     YAML::Node yaml = YAML::LoadFile(config_path);
@@ -67,6 +69,8 @@ BiopassConfig readConfig(const std::string& username) {
 
     if (yaml["strategy"]) {
       const auto& s = yaml["strategy"];
+      if (s["show_auth_status"])
+        config.strategy.show_auth_status = s["show_auth_status"].as<bool>();
       if (s["debug"])
         config.strategy.debug = s["debug"].as<bool>();
       if (s["execution_mode"])

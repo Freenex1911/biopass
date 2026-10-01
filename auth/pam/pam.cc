@@ -1,4 +1,5 @@
 #include <security/pam_appl.h>
+#include <security/pam_ext.h>
 #include <security/pam_modules.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,12 +7,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <charconv>
+#include <cstring>
+
+#include "auth_hint.h"
+#include "helper_process.h"
+
 // Called by PAM when a user needs to be authenticated
 PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh, int flags, int argc, const char** argv) {
-  (void)flags;
-  (void)argc;
-  (void)argv;
-
   int retval;
 
   const char* service = nullptr;
@@ -26,42 +29,44 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh, int flags, int argc, cons
     return retval;
   }
 
-  pid_t pid = fork();
-  if (pid < 0) {
-    return PAM_AUTH_ERR;
-  } else if (pid == 0) {
-    // Run "biopass-helper auth --username <username> [--service <name>]"
-    if (service != nullptr && service[0] != '\0') {
-      execl("/usr/bin/biopass-helper", "biopass-helper", "auth", "--username", pUsername,
-            "--service", service, NULL);
-    } else {
-      execl("/usr/bin/biopass-helper", "biopass-helper", "auth", "--username", pUsername, NULL);
-    }
-
-    // If execl returns, it failed. Don't perror() here: this process's
-    // stdio is inherited from the PAM caller (e.g. polkit-agent-helper-1),
-    // which some callers (GNOME Shell's polkit agent) parse as a strict
-    // line protocol -- any unexpected line on it derails the caller's
-    // authentication state machine instead of a clean failure.
-    exit(1);
-  } else {
-    int status;
-    waitpid(pid, &status, 0);
-
-    if (WIFEXITED(status)) {
-      int exit_code = WEXITSTATUS(status);
-      if (exit_code == 0) {
-        return PAM_SUCCESS;
-      } else if (exit_code == 2) {
-        return PAM_IGNORE;
-      } else {
+  unsigned timeout_ms = 30000;
+  for (int i = 0; i < argc; ++i) {
+    constexpr const char* prefix = "timeout_ms=";
+    if (strncmp(argv[i], prefix, strlen(prefix)) == 0) {
+      const char* first = argv[i] + strlen(prefix);
+      unsigned value = 0;
+      const auto parsed = std::from_chars(first, first + strlen(first), value);
+      if (parsed.ec != std::errc{} || *parsed.ptr != '\0' || value < 100 || value > 300000)
         return PAM_AUTH_ERR;
-      }
-    } else {
-      // Child did not exit normally (e.g., killed by signal)
-      return PAM_AUTH_ERR;
+      timeout_ms = value;
     }
   }
+  std::vector<std::string> arguments{"auth", "--username", pUsername};
+  const bool gnome = !(flags & PAM_SILENT) && service && strcmp(service, "gdm-password") == 0;
+  if (service && service[0]) {
+    arguments.push_back("--service");
+    arguments.push_back(service);
+  }
+  const auto started = std::chrono::steady_clock::now();
+  biopass::AuthHint hint(gnome);
+  const int exit_code =
+      biopass::runAuthHelper("/usr/bin/biopass-helper", arguments,
+                             std::chrono::milliseconds(timeout_ms), [&](const std::string& status) {
+                               // One optional hint, only during a slow GNOME authentication.
+                               // Success messages are deliberately omitted: GNOME queues them and
+                               // delays unlock.
+                               const char* message = hint.update(
+                                   status, std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::steady_clock::now() - started));
+                               if (!message)
+                                 return true;
+                               return pam_info(pamh, "%s", message) == PAM_SUCCESS;
+                             });
+  if (exit_code == 0)
+    return PAM_SUCCESS;
+  if (exit_code == 2)
+    return PAM_IGNORE;
+  return PAM_AUTH_ERR;
 }
 
 // The functions below are required by PAM, but not needed in this module

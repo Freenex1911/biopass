@@ -1,5 +1,5 @@
-use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::io::{BufReader, Read, Write};
+use std::process::{ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::config::{load_config, BiopassConfig};
 use crate::db;
+use crate::helper_io::{configure_helper, read_header, DeadlineReader, ManagedChild};
 use crate::paths::get_faces_dir;
 
 const PREVIEW_EVENT: &str = "face-preview-frame";
@@ -17,11 +18,11 @@ const FRAME_INTERVAL_MS: u64 = 33; // ~30fps ceiling
 
 struct ChildIO {
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    stdout: BufReader<DeadlineReader>,
 }
 
 struct PreviewSession {
-    child: Child,
+    child: Arc<Mutex<ManagedChild>>,
     io: Arc<Mutex<ChildIO>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -42,29 +43,23 @@ pub(crate) fn helper_path() -> String {
     }
 }
 
-fn read_line_trim(reader: &mut BufReader<ChildStdout>) -> std::io::Result<String> {
-    let mut line = String::new();
-    let n = reader.read_line(&mut line)?;
-    if n == 0 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "child closed stdout",
-        ));
-    }
-    if line.ends_with('\n') {
-        line.pop();
-    }
-    if line.ends_with('\r') {
-        line.pop();
-    }
-    Ok(line)
+#[tauri::command]
+pub async fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || start_preview(app, camera))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), String> {
+fn start_preview(app: AppHandle, camera: Option<String>) -> Result<(), String> {
     let mut guard = SESSION.lock().map_err(|e| e.to_string())?;
-    if guard.is_some() {
+    if guard
+        .as_ref()
+        .is_some_and(|session| !session.stop.load(Ordering::Relaxed))
+    {
         return Ok(());
+    }
+    if let Some(session) = guard.take() {
+        finish_session(session);
     }
 
     let config: BiopassConfig = load_config(app.clone())?;
@@ -74,6 +69,7 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
         .ok_or_else(|| format!("Detection model '{}' not found in registry", model_id))?;
 
     let mut cmd = Command::new(helper_path());
+    configure_helper(&mut cmd);
     cmd.arg("preview-session")
         .arg("--model")
         .arg(&detect_model)
@@ -84,16 +80,16 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
         cmd.arg("--camera").arg(cam);
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to spawn helper: {e}"))?;
-    let stdin = child.stdin.take().ok_or("missing stdin")?;
-    let stdout = child.stdout.take().ok_or("missing stdout")?;
-    let mut reader = BufReader::new(stdout);
+    let mut child = ManagedChild(
+        cmd.spawn()
+            .map_err(|e| format!("Failed to spawn helper: {e}"))?,
+    );
+    let stdin = child.0.stdin.take().ok_or("missing stdin")?;
+    let stdout = child.0.stdout.take().ok_or("missing stdout")?;
+    let mut reader = BufReader::new(DeadlineReader::new(stdout, Duration::from_secs(10)));
 
-    let ready = read_line_trim(&mut reader).map_err(|e| format!("Helper did not respond: {e}"))?;
+    let ready = read_header(&mut reader).map_err(|e| format!("Helper did not respond: {e}"))?;
     if ready != "READY" {
-        let _ = child.kill();
         return Err(format!("Helper failed to initialize: {ready}"));
     }
 
@@ -101,11 +97,13 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
         stdin,
         stdout: reader,
     }));
+    let child = Arc::new(Mutex::new(child));
     let stop = Arc::new(AtomicBool::new(false));
     let thread = {
         let io = Arc::clone(&io);
         let stop = Arc::clone(&stop);
         let app = app.clone();
+        let child = Arc::clone(&child);
         thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
                 let frame_result: Result<Vec<u8>, ()> = {
@@ -113,19 +111,28 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
                         Ok(g) => g,
                         Err(_) => break,
                     };
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let io_ref: &mut ChildIO = &mut *io_guard;
                     let send_err = io_ref.stdin.write_all(b"FRAME\n").is_err()
                         || io_ref.stdin.flush().is_err();
                     if send_err {
                         break;
                     }
-                    let mut header = String::new();
-                    if io_ref.stdout.read_line(&mut header).is_err() {
-                        break;
-                    }
-                    let header = header.trim();
+                    io_ref
+                        .stdout
+                        .get_mut()
+                        .reset_deadline(Duration::from_secs(5));
+                    let header = match read_header(&mut io_ref.stdout) {
+                        Ok(header) => header,
+                        Err(_) => break,
+                    };
                     if let Some(rest) = header.strip_prefix("OK ") {
                         if let Ok(len) = rest.parse::<usize>() {
+                            if len == 0 || len > 8 * 1024 * 1024 {
+                                break;
+                            }
                             let mut buf = vec![0u8; len];
                             if io_ref.stdout.read_exact(&mut buf).is_err() {
                                 break;
@@ -147,6 +154,11 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
 
                 thread::sleep(Duration::from_millis(FRAME_INTERVAL_MS));
             }
+            let unexpected = !stop.swap(true, Ordering::Relaxed);
+            terminate_helper(&child);
+            if unexpected {
+                let _ = app.emit("face-preview-error", "Camera preview stopped because the camera did not respond. Try starting it again.");
+            }
         })
     };
 
@@ -159,29 +171,58 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
     Ok(())
 }
 
+fn terminate_helper(child: &Arc<Mutex<ManagedChild>>) {
+    if let Ok(mut child) = child.lock() {
+        let _ = child.0.kill();
+        let _ = child.0.wait();
+    }
+}
+
 #[tauri::command]
-pub fn stop_face_preview() -> Result<(), String> {
+pub async fn stop_face_preview() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || stop_preview())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+pub(crate) fn cleanup_preview() {
+    let _ = stop_preview();
+}
+
+fn finish_session(mut session: PreviewSession) {
+    session.stop.store(true, Ordering::Relaxed);
+    // Kill before joining: the worker may hold io waiting for a response.
+    terminate_helper(&session.child);
+    if let Some(thread) = session.thread.take() {
+        let _ = thread.join();
+    }
+}
+
+fn stop_preview() -> Result<(), String> {
     let mut guard = SESSION.lock().map_err(|e| e.to_string())?;
-    if let Some(mut sess) = guard.take() {
-        sess.stop.store(true, Ordering::Relaxed);
-        // Best-effort QUIT; helper exits on EOF anyway.
-        if let Ok(mut io) = sess.io.lock() {
-            let _ = io.stdin.write_all(b"QUIT\n");
-            let _ = io.stdin.flush();
-        }
-        if let Some(t) = sess.thread.take() {
-            let _ = t.join();
-        }
-        let _ = sess.child.kill();
-        let _ = sess.child.wait();
+    if let Some(session) = guard.take() {
+        finish_session(session);
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn capture_face_in_session(app: AppHandle) -> Result<String, String> {
+pub async fn capture_face_in_session(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || capture_preview(app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn capture_preview(app: AppHandle) -> Result<String, String> {
     let guard = SESSION.lock().map_err(|e| e.to_string())?;
     let sess = guard.as_ref().ok_or("No active preview session")?;
+    let io_handle = Arc::clone(&sess.io);
+    let stop = Arc::clone(&sess.stop);
+    let child = Arc::clone(&sess.child);
+    drop(guard);
+    if stop.load(Ordering::Relaxed) {
+        return Err("Camera preview has stopped. Start it again.".into());
+    }
 
     let faces_dir = get_faces_dir(&app)?;
     if !faces_dir.exists() {
@@ -195,20 +236,27 @@ pub fn capture_face_in_session(app: AppHandle) -> Result<String, String> {
         .as_millis();
     let file_path = faces_dir.join(format!("face_{}.jpg", ts));
 
-    let mut io = sess.io.lock().map_err(|e| e.to_string())?;
+    let mut io = io_handle.lock().map_err(|e| e.to_string())?;
     let cmd = format!("CAPTURE {}\n", file_path.display());
     io.stdin
         .write_all(cmd.as_bytes())
         .map_err(|e| format!("write CAPTURE: {e}"))?;
     io.stdin.flush().map_err(|e| format!("flush: {e}"))?;
 
-    let mut response = String::new();
-    io.stdout
-        .read_line(&mut response)
-        .map_err(|e| format!("read response: {e}"))?;
-    let response = response.trim();
-
-    match response {
+    io.stdout.get_mut().reset_deadline(Duration::from_secs(10));
+    let response = match read_header(&mut io.stdout) {
+        Ok(response) => response,
+        Err(error) => {
+            stop.store(true, Ordering::Relaxed);
+            terminate_helper(&child);
+            let _ = app.emit(
+                "face-preview-error",
+                "Camera preview stopped because the camera did not respond. Try starting it again.",
+            );
+            return Err(format!("read response: {error}"));
+        }
+    };
+    match response.as_str() {
         "OK" => Ok(file_path.to_string_lossy().to_string()),
         "NO_FACE" => {
             Err("No face detected. Please position your face in front of the camera.".into())

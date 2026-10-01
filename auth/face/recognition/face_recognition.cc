@@ -32,6 +32,8 @@ std::vector<float> FaceRecognition::inference(const ImageRGB& image) {
 }
 
 float FaceRecognition::cosine(const std::vector<float>& feat1, const std::vector<float>& feat2) {
+  if (feat1.empty() || feat1.size() != feat2.size())
+    throw std::invalid_argument("Face embeddings must have matching, nonzero dimensions");
   float dot_product = 0, norm1 = 0, norm2 = 0;
   for (size_t i = 0; i < feat1.size(); i++) {
     dot_product += feat1[i] * feat2[i];
@@ -49,14 +51,16 @@ float FaceRecognition::cosine(const std::vector<float>& feat1, const std::vector
   return sim;
 }
 
+std::vector<float> FaceRecognition::embedding(const ImageRGB& image) { return inference(image); }
+
+MatchResult FaceRecognition::matchEmbeddings(const std::vector<float>& first,
+                                             const std::vector<float>& second) {
+  const float score = cosine(first, second);
+  return MatchResult(score, score > threshold);
+}
+
 MatchResult FaceRecognition::match(const ImageRGB& image1, const ImageRGB& image2) {
-  std::vector<float> feature1 = this->inference(image1);
-  std::vector<float> feature2 = this->inference(image2);
-  float distance = this->cosine(feature1, feature2);
-  bool similar = false;
-  if (distance > this->threshold)
-    similar = true;
-  return MatchResult(distance, similar);
+  return matchEmbeddings(embedding(image1), embedding(image2));
 }
 
 }  // namespace biopass
