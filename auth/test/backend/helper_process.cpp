@@ -42,16 +42,15 @@ int main(int argc, char** argv) {
     return 9;
   }
   using namespace std::chrono;
-  biopass::AuthHint hint(true), disabled(false), unknown(true);
-  require(!hint.update("FACE", milliseconds(1999)), "fast authentication queued a hint");
-  require(!disabled.update("FACE", seconds(5)), "disabled hints were shown");
-  require(!unknown.update("untrusted arbitrary text", seconds(5)), "unknown status became a hint");
-  require(!hint.update("FINGERPRINT", milliseconds(1999)),
-          "fast parallel authentication queued a hint");
-  require(std::string(hint.update("", seconds(2))) ==
-              "Look at the camera or touch the fingerprint reader",
-          "slow parallel hint incorrect");
-  require(!hint.update("FACE", seconds(3)), "hint repeated");
+  biopass::AuthHint hint(true), fingerprint(true), disabled(false), unknown(true);
+  require(!hint.update(""), "empty status became a hint");
+  require(!disabled.update("FACE"), "disabled hints were shown");
+  require(!unknown.update("untrusted arbitrary text"), "unknown status became a hint");
+  require(std::string(hint.update("FACE")) == "Look at the camera",
+          "camera hint was not immediate");
+  require(std::string(fingerprint.update("FINGERPRINT")) == "Touch the fingerprint reader",
+          "fingerprint hint was not immediate");
+  require(!hint.update("FACE") && !hint.update("FINGERPRINT"), "hint repeated");
   const std::string self = "/proc/self/exe";
   require(biopass::runAuthHelper(self, {"parent-death"}, seconds(1)) == 0,
           "parent-death cleanup is not armed");

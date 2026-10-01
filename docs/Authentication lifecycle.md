@@ -20,9 +20,9 @@ Helper stdout/stderr are disconnected from the caller during PAM authentication.
 
 Enable **GNOME sign-in hints** in **Sign-in settings → Sign-in behavior & system integration** and save. The setting is `strategy.show_auth_status`; it defaults to false, including for older configuration files.
 
-Hints apply only to the `gdm-password` PAM service, when the caller permits informational messages. If an attempt is still running after two seconds, BioPass sends at most one standard PAM informational message: look at the camera, touch the fingerprint reader, or either for parallel methods. No extra extension, permanent notification service or fake password prompt is used.
+Hints apply only to the `gdm-password` PAM service, when the caller permits informational messages. When the first available authentication method starts, BioPass sends at most one standard PAM informational message: look at the camera or touch the fingerprint reader. No extra extension, permanent notification service or fake password prompt is used.
 
-These messages improve feedback but do not replace GNOME's password field or add a face-authentication button. GNOME may retain an informational message briefly before completing an unlock; quick attempts produce no hint. Successful authentication does not enqueue an additional message.
+These messages improve feedback but do not replace GNOME's password field or add a face-authentication button. GNOME keeps a short informational message pending for at least two seconds from receipt. This overlaps authentication; only any remaining display time can delay completion of an unlock. Successful authentication does not enqueue an additional message.
 
 Keep the existing distinction between first login and unlocking an active session when the login keyring needs the password. BioPass does not change that policy or disable password authentication.
 

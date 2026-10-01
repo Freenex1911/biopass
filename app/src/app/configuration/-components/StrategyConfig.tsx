@@ -166,7 +166,7 @@ export function StrategyConfig() {
           <div className="grid gap-1">
             <Label htmlFor="auth-status">GNOME sign-in hints</Label>
             <p className="text-xs text-muted-foreground">
-              Show a camera or fingerprint hint during longer unlock attempts.
+              Show a hint when camera or fingerprint authentication starts.
               GNOME may keep the hint visible briefly before unlocking.
             </p>
           </div>
