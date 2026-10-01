@@ -120,6 +120,10 @@ std::shared_ptr<libcamera::Camera> findCameraByPath(libcamera::CameraManager& ma
 std::shared_ptr<libcamera::Camera> findCamera(
     libcamera::CameraManager& manager, const std::optional<std::string>& linux_video_device_path) {
   if (linux_video_device_path.has_value()) {
+    constexpr const char* id_prefix = "libcamera:";
+    if (linux_video_device_path->rfind(id_prefix, 0) == 0) {
+      return manager.get(linux_video_device_path->substr(std::strlen(id_prefix)));
+    }
     auto camera = findCameraByPath(manager, *linux_video_device_path);
     if (!camera) {
       spdlog::error("FaceAuth: Camera path '{}' was not found among libcamera devices",
@@ -567,6 +571,16 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
 bool checkCameraAvailability(const std::optional<std::string>& linux_video_device_path) {
   auto session = openCameraSession(linux_video_device_path);
   return session && session->isOpen();
+}
+
+std::optional<std::string> resolveCameraSelector(const std::string& selector) {
+  auto manager = cameraManager();
+  if (!manager || selector.empty())
+    return std::nullopt;
+  auto camera = findCamera(*manager, selector);
+  if (!camera)
+    return std::nullopt;
+  return "libcamera:" + camera->id();
 }
 
 std::unique_ptr<ICameraCaptureSession> openCameraSession(

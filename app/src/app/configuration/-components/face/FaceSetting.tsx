@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { ModelStatus } from "@/app/-components/ModelStatus";
 import { cmd } from "@/commands";
@@ -11,9 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  cameraMatches,
+  selectAvailableCameraPair,
+} from "@/lib/camera-selection";
 import type { BiopassConfig, Model, VideoDeviceInfo } from "@/types/config";
 import { ModelSelect } from "../methods/shared/ModelSelect";
 import { Threshold } from "../methods/shared/Threshold";
+import { CameraPairSetting } from "./CameraPairSetting";
 import { FaceCapture } from "./FaceCapture";
 
 function parseNumberInput(value: string): number {
@@ -31,21 +36,33 @@ export function FaceSetting() {
   });
   const [models, setModels] = useState<Model[]>([]);
   const [videoDevices, setVideoDevices] = useState<VideoDeviceInfo[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [antiSpoofStatusMap, setAntiSpoofStatusMap] = useState<
     Record<string, boolean>
   >({});
 
-  useEffect(() => {
-    const fetchDevices = async () => {
-      try {
-        setVideoDevices(await cmd.face.listVideoDevices());
-      } catch (err) {
-        console.error("Failed to fetch devices:", err);
-      }
-    };
-
-    fetchDevices();
+  const fetchDevices = useCallback(async () => {
+    setDevicesLoading(true);
+    try {
+      setVideoDevices(await cmd.face.listVideoDevices());
+      setDiscoveryError(null);
+    } catch (err) {
+      console.error("Failed to fetch devices:", err);
+      setDiscoveryError(String(err));
+      setVideoDevices([]);
+    } finally {
+      setDevicesLoading(false);
+    }
   }, []);
+  useEffect(() => {
+    void fetchDevices();
+    const refreshOnFocus = () => {
+      void fetchDevices();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [fetchDevices]);
 
   useEffect(() => {
     const fetchModels = async () => {
@@ -59,13 +76,15 @@ export function FaceSetting() {
     fetchModels();
   }, []);
 
-  const selectedCamera = config.camera
-    ? (videoDevices.find((device) => device.path === config.camera) ?? null)
+  const cameraPath = config.camera;
+  const selectedCamera = cameraPath
+    ? (videoDevices.find((device) => cameraMatches(device, cameraPath)) ?? null)
     : null;
 
   const irCameraPath = config.anti_spoofing.ir_camera;
   const selectedIrCamera = irCameraPath
-    ? (videoDevices.find((device) => device.path === irCameraPath) ?? null)
+    ? (videoDevices.find((device) => cameraMatches(device, irCameraPath)) ??
+      null)
     : null;
 
   const antiSpoofModels = models.filter(
@@ -109,9 +128,21 @@ export function FaceSetting() {
       ? config.anti_spoofing.model.model_id
       : unavailableAiModelOption
     : disabledOption;
+  const paired = config.camera_selection.mode !== "legacy";
+  const activePair = selectAvailableCameraPair(
+    config.camera_selection,
+    videoDevices,
+  );
+  const previewCamera = paired ? (activePair?.camera ?? null) : config.camera;
 
   return (
     <div className="grid gap-4">
+      <CameraPairSetting
+        devices={videoDevices}
+        refresh={() => void fetchDevices()}
+        loading={devicesLoading}
+        discoveryError={discoveryError}
+      />
       <div className="grid grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
         <div className="grid gap-2">
           <Label
@@ -180,59 +211,64 @@ export function FaceSetting() {
         </div>
       </div>
 
-      <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-        <div className="grid gap-2">
-          <Label
-            htmlFor="camera-device"
-            className="text-sm font-medium text-muted-foreground"
-          >
-            Camera Device
-          </Label>
-          <Select
-            value={cameraValue}
-            onValueChange={(value) => {
-              if (value === disabledOption) {
-                setValue("methods.face.camera", null, {
+      {!paired && (
+        <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
+          <div className="grid gap-2">
+            <Label
+              htmlFor="camera-device"
+              className="text-sm font-medium text-muted-foreground"
+            >
+              Camera Device
+            </Label>
+            <Select
+              value={cameraValue}
+              onValueChange={(value) => {
+                if (value === disabledOption) {
+                  setValue("methods.face.camera", null, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                  return;
+                }
+                setValue("methods.face.camera", value, {
                   shouldDirty: true,
                   shouldValidate: true,
                 });
-                return;
-              }
-              setValue("methods.face.camera", value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              });
-            }}
-          >
-            <SelectTrigger id="camera-device" className="h-10 w-full">
-              <SelectValue placeholder="Auto-select (first device)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={disabledOption}>
-                Auto-select (first device)
-              </SelectItem>
-              {cameraValue === unavailableCameraDeviceOption && (
-                <SelectItem value={unavailableCameraDeviceOption} disabled>
-                  Selected camera unavailable
+              }}
+            >
+              <SelectTrigger id="camera-device" className="h-10 w-full">
+                <SelectValue placeholder="Auto-select (first device)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={disabledOption}>
+                  Auto-select (first device)
                 </SelectItem>
-              )}
-              {videoDevices.length > 0 ? (
-                videoDevices.map((device) => (
-                  <SelectItem key={device.path} value={device.path}>
-                    {device.display_name}
+                {cameraValue === unavailableCameraDeviceOption && (
+                  <SelectItem value={unavailableCameraDeviceOption} disabled>
+                    Selected camera unavailable
                   </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_devices__" disabled>
-                  No video devices found
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+                )}
+                {videoDevices.length > 0 ? (
+                  videoDevices.map((device) => (
+                    <SelectItem key={device.path} value={device.path}>
+                      {device.display_name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="__no_devices__" disabled>
+                    No video devices found
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      )}
 
-      <FaceCapture />
+      <FaceCapture
+        camera={previewCamera}
+        available={!paired || Boolean(activePair)}
+      />
 
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
         <h4 className="font-medium mb-3 text-sm">Detection</h4>
@@ -389,47 +425,52 @@ export function FaceSetting() {
           </div>
         )}
 
-        <div className="grid gap-2">
-          <Label htmlFor="ir-device" className="text-xs text-muted-foreground">
-            IR Camera
-          </Label>
-          <Select
-            value={irCameraValue}
-            onValueChange={(value) => {
-              setValue(
-                "methods.face.anti_spoofing.ir_camera",
-                value === disabledOption ? null : value,
-                {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                },
-              );
-            }}
-          >
-            <SelectTrigger id="ir-device" className="h-10 w-full">
-              <SelectValue placeholder="Select IR Camera Device" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={disabledOption}>Disable</SelectItem>
-              {irCameraValue === unavailableIrDeviceOption && (
-                <SelectItem value={unavailableIrDeviceOption} disabled>
-                  Selected IR camera unavailable
-                </SelectItem>
-              )}
-              {videoDevices.length > 0 ? (
-                videoDevices.map((device) => (
-                  <SelectItem key={device.path} value={device.path}>
-                    {device.display_name}
+        {!paired && (
+          <div className="grid gap-2">
+            <Label
+              htmlFor="ir-device"
+              className="text-xs text-muted-foreground"
+            >
+              IR Camera
+            </Label>
+            <Select
+              value={irCameraValue}
+              onValueChange={(value) => {
+                setValue(
+                  "methods.face.anti_spoofing.ir_camera",
+                  value === disabledOption ? null : value,
+                  {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  },
+                );
+              }}
+            >
+              <SelectTrigger id="ir-device" className="h-10 w-full">
+                <SelectValue placeholder="Select IR Camera Device" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={disabledOption}>Disable</SelectItem>
+                {irCameraValue === unavailableIrDeviceOption && (
+                  <SelectItem value={unavailableIrDeviceOption} disabled>
+                    Selected IR camera unavailable
                   </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_ir_devices__" disabled>
-                  No video devices found
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+                )}
+                {videoDevices.length > 0 ? (
+                  videoDevices.map((device) => (
+                    <SelectItem key={device.path} value={device.path}>
+                      {device.display_name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="__no_ir_devices__" disabled>
+                    No video devices found
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </div>
   );

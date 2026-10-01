@@ -38,9 +38,74 @@ pub struct FaceMethodConfig {
     pub retries: u32,
     pub retry_delay: u32,
     pub camera: Option<String>,
+    #[serde(default)]
+    pub camera_selection: CameraSelectionConfig,
     pub detection: DetectionConfig,
     pub recognition: RecognitionConfig,
     pub anti_spoofing: AntiSpoofingConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CameraSelectionMode {
+    Legacy,
+    Priority,
+    Fixed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct CameraPairConfig {
+    pub id: String,
+    pub name: String,
+    pub camera: String,
+    pub ir_camera: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct CameraSelectionConfig {
+    pub mode: CameraSelectionMode,
+    pub pairs: Vec<CameraPairConfig>,
+    pub fixed_pair: Option<String>,
+}
+
+impl Default for CameraSelectionConfig {
+    fn default() -> Self {
+        Self {
+            mode: CameraSelectionMode::Legacy,
+            pairs: Vec::new(),
+            fixed_pair: None,
+        }
+    }
+}
+
+fn validate_camera_selection(selection: &CameraSelectionConfig) -> Result<(), String> {
+    if selection.mode == CameraSelectionMode::Legacy {
+        return Ok(());
+    }
+    if selection.pairs.is_empty() {
+        return Err("Add at least one camera pair".into());
+    }
+    let mut ids = std::collections::HashSet::new();
+    for pair in &selection.pairs {
+        if pair.id.is_empty() || !ids.insert(&pair.id) {
+            return Err("Camera pair IDs must be unique and nonempty".into());
+        }
+        if pair.name.trim().is_empty() || pair.camera.is_empty() || pair.ir_camera.is_empty() {
+            return Err("Each camera pair needs a name, color camera and IR camera".into());
+        }
+        if pair.camera == pair.ir_camera {
+            return Err("Use different color and IR streams".into());
+        }
+    }
+    if selection.mode == CameraSelectionMode::Fixed
+        && !selection
+            .pairs
+            .iter()
+            .any(|pair| Some(&pair.id) == selection.fixed_pair.as_ref())
+    {
+        return Err("Select the fixed camera pair".into());
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -100,6 +165,7 @@ fn get_default_config() -> BiopassConfig {
                 retries: 5,
                 retry_delay: 200,
                 camera: None,
+                camera_selection: CameraSelectionConfig::default(),
                 detection: DetectionConfig {
                     model_id: "yolov8n-face".to_string(),
                     threshold: 0.5,
@@ -168,6 +234,7 @@ pub fn load_config(app: AppHandle) -> Result<BiopassConfig, String> {
 
 #[tauri::command]
 pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> {
+    validate_camera_selection(&config.methods.face.camera_selection)?;
     let config_dir = get_config_dir(&app)?;
     let config_path = get_config_path(&app)?;
 
@@ -206,4 +273,62 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
         .map_err(|e| format!("Failed to save config file: {}", e))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_configs_preserve_individual_camera_settings() {
+        let mut config = get_default_config();
+        config.methods.face.camera = Some("/dev/video0".into());
+        config.methods.face.anti_spoofing.ir_camera = Some("/dev/video2".into());
+        let mut value = serde_json::to_value(&config).unwrap();
+        value["methods"]["face"]
+            .as_object_mut()
+            .unwrap()
+            .remove("camera_selection");
+        let loaded = parse_config(&serde_yaml::to_string(&value).unwrap());
+        assert_eq!(loaded, config);
+    }
+
+    #[test]
+    fn pair_configuration_round_trips_without_losing_disconnected_entries() {
+        let mut config = get_default_config();
+        config.methods.face.camera_selection = CameraSelectionConfig {
+            mode: CameraSelectionMode::Priority,
+            fixed_pair: None,
+            pairs: vec![CameraPairConfig {
+                id: "dock".into(),
+                name: "Dock".into(),
+                camera: "libcamera:rgb".into(),
+                ir_camera: "libcamera:ir".into(),
+            }],
+        };
+        assert_eq!(
+            parse_config(&serde_yaml::to_string(&config).unwrap()),
+            config
+        );
+    }
+
+    #[test]
+    fn fixed_mode_requires_an_explicit_pair() {
+        let selection = CameraSelectionConfig {
+            mode: CameraSelectionMode::Fixed,
+            fixed_pair: Some("missing".into()),
+            pairs: vec![CameraPairConfig {
+                id: "dock".into(),
+                name: "Dock".into(),
+                camera: "libcamera:rgb".into(),
+                ir_camera: "libcamera:ir".into(),
+            }],
+        };
+        assert!(validate_camera_selection(&selection).is_err());
+        assert!(validate_camera_selection(&CameraSelectionConfig {
+            fixed_pair: Some("dock".into()),
+            ..selection
+        })
+        .is_ok());
+    }
 }

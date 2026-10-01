@@ -38,6 +38,8 @@ add_subdirectory(pam)
 # Testing Directories
 option(BUILD_TESTS "Build test configurations" OFF)
 if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test/camera_selection)
     add_subdirectory(test/camera)
     add_subdirectory(test/face_engine)
 endif()

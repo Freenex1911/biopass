@@ -140,6 +140,21 @@ BiopassConfig readConfig(const std::string& username) {
         if (f["camera"] && !f["camera"].IsNull()) {
           config.methods.face.camera = f["camera"].as<std::string>();
         }
+        if (f["camera_selection"]) {
+          const auto& selection = f["camera_selection"];
+          auto& target = config.methods.face.camera_selection;
+          if (selection["mode"])
+            target.mode = selection["mode"].as<std::string>();
+          if (selection["fixed_pair"] && !selection["fixed_pair"].IsNull())
+            target.fixed_pair = selection["fixed_pair"].as<std::string>();
+          if (selection["pairs"]) {
+            for (const auto& pair : selection["pairs"]) {
+              target.pairs.push_back({pair["id"].as<std::string>(), pair["name"].as<std::string>(),
+                                      pair["camera"].as<std::string>(),
+                                      pair["ir_camera"].as<std::string>()});
+            }
+          }
+        }
         if (f["anti_spoofing"]) {
           const auto& anti_spoofing = f["anti_spoofing"];
           if (anti_spoofing["enable"]) {

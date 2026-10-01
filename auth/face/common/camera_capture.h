@@ -31,6 +31,8 @@ class ICameraCaptureSession {
 };
 
 bool checkCameraAvailability(const std::optional<std::string>& device_path);
+// Checks enumeration only, without starting/stopping a capture stream.
+std::optional<std::string> resolveCameraSelector(const std::string& selector);
 std::unique_ptr<ICameraCaptureSession> openCameraSession(
     const std::optional<std::string>& device_path,
     CameraCaptureFormat format = CameraCaptureFormat::Default, int warmup_frames = 5,

@@ -25,6 +25,46 @@ using biopass::FaceDetection;
 
 namespace {
 
+std::string jsonString(const std::string& value) {
+  std::string result = "\"";
+  constexpr char hex[] = "0123456789abcdef";
+  for (const unsigned char ch : value) {
+    if (ch == '"' || ch == '\\') {
+      result += '\\';
+      result += static_cast<char>(ch);
+    } else if (ch < 0x20) {
+      result += "\\u00";
+      result += hex[ch >> 4];
+      result += hex[ch & 0x0f];
+    } else {
+      result += static_cast<char>(ch);
+    }
+  }
+  return result + '"';
+}
+
+int listCameras() {
+  spdlog::set_level(spdlog::level::off);
+  const auto cameras = biopass::listCameraDevices();
+  std::cout << '[';
+  bool first = true;
+  for (const auto& camera : cameras) {
+    if (!first)
+      std::cout << ',';
+    first = false;
+    std::cout << "{\"id\":" << jsonString(camera.id) << ",\"model\":" << jsonString(camera.model)
+              << ",\"video_paths\":[";
+    for (size_t i = 0; i < camera.video_paths.size(); ++i) {
+      if (i)
+        std::cout << ',';
+      std::cout << jsonString(camera.video_paths[i]);
+    }
+    std::cout << "]}";
+  }
+  std::cout << "]\n";
+  return 0;
+}
+
 void appendJpegToBuffer(void* context, void* data, int size) {
   auto* buf = static_cast<std::vector<uint8_t>*>(context);
   buf->insert(buf->end(), static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size);
@@ -268,7 +308,8 @@ int authenticate(const std::string& username, const std::string& service) {
 
   biopass::AuthConfig runtime_config;
   runtime_config.debug = config.strategy.debug;
-  runtime_config.antispoof = config.methods.face.anti_spoofing.enable ||
+  runtime_config.antispoof = config.methods.face.camera_selection.mode != "legacy" ||
+                             config.methods.face.anti_spoofing.enable ||
                              (config.methods.face.anti_spoofing.ir_camera.has_value() &&
                               !config.methods.face.anti_spoofing.ir_camera->empty());
 
@@ -314,6 +355,8 @@ int main(int argc, char** argv) {
   crop_cmd->add_option("--output,-o", outputPath, "Output image path")->required();
   crop_cmd->add_option("--model,-m", modelPath, "Detection model path")->required();
 
+  auto list_cameras_cmd = app.add_subcommand("list-cameras", "List capture cameras as JSON");
+
   auto capture_cmd = app.add_subcommand("capture-face",
                                         "Capture a frame from a camera and crop the detected face");
   std::string capCameraPath, capOutputPath, capModelPath;
@@ -348,6 +391,10 @@ int main(int argc, char** argv) {
 
   if (app.got_subcommand(crop_cmd)) {
     return cropFace(inputPath, outputPath, modelPath);
+  }
+
+  if (app.got_subcommand(list_cameras_cmd)) {
+    return listCameras();
   }
 
   if (app.got_subcommand(capture_cmd)) {

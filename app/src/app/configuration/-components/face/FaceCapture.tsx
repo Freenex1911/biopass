@@ -2,19 +2,21 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Camera, Circle, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
-import type { BiopassConfig } from "@/types/config";
 
-export function FaceCapture() {
+export function FaceCapture({
+  camera,
+  available,
+}: {
+  camera: string | null;
+  available: boolean;
+}) {
   const previewRef = useRef<HTMLImageElement>(null);
   const [capturing, setCapturing] = useState(false);
+  const runningCamera = useRef<string | null | undefined>(undefined);
   const [faceImages, setFaceImages] = useState<string[]>([]);
-  const camera = useWatch<BiopassConfig, "methods.face.camera">({
-    name: "methods.face.camera",
-  });
 
   async function loadFaceImages() {
     try {
@@ -64,11 +66,17 @@ export function FaceCapture() {
   // Restart session when camera selection changes while preview is running.
   useEffect(() => {
     if (!capturing) return;
+    if (available && runningCamera.current === camera) return;
     let alive = true;
     (async () => {
       try {
         await cmd.face.stopPreview();
+        if (!available) {
+          setCapturing(false);
+          return;
+        }
         await cmd.face.startPreview(camera);
+        runningCamera.current = camera;
       } catch (err) {
         if (alive) {
           toast.error(`Failed to switch camera: ${err}`);
@@ -79,11 +87,13 @@ export function FaceCapture() {
     return () => {
       alive = false;
     };
-  }, [camera, capturing]);
+  }, [camera, capturing, available]);
 
   async function startCamera() {
+    if (!available) return;
     try {
       await cmd.face.startPreview(camera);
+      runningCamera.current = camera;
       setCapturing(true);
     } catch (err) {
       toast.error(`Failed to start camera: ${err}`);
@@ -146,7 +156,12 @@ export function FaceCapture() {
 
         <div className="flex gap-2">
           {!capturing ? (
-            <Button type="button" onClick={startCamera} className="flex-1">
+            <Button
+              type="button"
+              onClick={startCamera}
+              disabled={!available}
+              className="flex-1"
+            >
               <Camera className="w-4 h-4 mr-2" />
               Start Camera
             </Button>
@@ -163,12 +178,6 @@ export function FaceCapture() {
             </>
           )}
         </div>
-
-        {capturing && (
-          <p className="text-[10px] text-muted-foreground">
-            Native preview via openpnp-capture (works cross-distro).
-          </p>
-        )}
 
         {faceImages.length > 0 && (
           <div>

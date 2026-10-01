@@ -29,7 +29,10 @@ struct PreviewSession {
 
 static SESSION: Mutex<Option<PreviewSession>> = Mutex::new(None);
 
-fn helper_path() -> String {
+pub(crate) fn helper_path() -> String {
+    if let Ok(path) = std::env::var("BIOPASS_HELPER_PATH") {
+        return path;
+    }
     if std::path::Path::new("/usr/bin/biopass-helper").exists() {
         "/usr/bin/biopass-helper".into()
     } else if std::path::Path::new("../../auth/build/pam/biopass-helper").exists() {

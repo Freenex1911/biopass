@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
 #include <future>
+#include <memory>
 
 #include "auth_config.h"
 #include "auth_method.h"
@@ -44,7 +44,8 @@ class FaceAuth : public IAuthMethod {
   bool ensureModelsLoaded();
   bool loadModels();
 
-  FaceMethodConfig face_config_;
+  mutable FaceMethodConfig face_config_;
+  mutable bool camera_pair_resolved_ = false;
   ModelRegistry model_registry_;
   mutable std::unique_ptr<ICameraCaptureSession> camera_session_;
   std::unique_ptr<ICameraCaptureSession> ir_camera_session_;

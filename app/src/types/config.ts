@@ -21,6 +21,20 @@ export interface VideoDeviceInfo {
   path: string;
   name: string;
   display_name: string;
+  stable_id: string;
+}
+
+export interface CameraPairConfig {
+  id: string;
+  name: string;
+  camera: string;
+  ir_camera: string;
+}
+
+export interface CameraSelectionConfig {
+  mode: "legacy" | "priority" | "fixed";
+  pairs: CameraPairConfig[];
+  fixed_pair: string | null;
 }
 
 export interface FaceMethodConfig {
@@ -28,6 +42,7 @@ export interface FaceMethodConfig {
   retries: number;
   retry_delay: number;
   camera: string | null;
+  camera_selection: CameraSelectionConfig;
   detection: {
     model_id: string;
     threshold: number;

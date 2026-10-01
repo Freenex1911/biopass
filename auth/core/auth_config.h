@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "auth_manager.h"
+#include "camera_selection.h"
 
 namespace biopass {
 
@@ -79,6 +80,7 @@ struct FaceMethodConfig {
   // Linux device path for the primary (visual) camera, e.g. "/dev/video0". nullopt means
   // auto-select.
   std::optional<std::string> camera = std::nullopt;
+  CameraSelectionConfig camera_selection;
   DetectionConfig detection;
   RecognitionConfig recognition;
   AntiSpoofingConfig anti_spoofing;
