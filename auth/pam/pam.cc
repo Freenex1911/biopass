@@ -47,17 +47,14 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh, int flags, int argc, cons
     arguments.push_back("--service");
     arguments.push_back(service);
   }
-  const auto started = std::chrono::steady_clock::now();
   biopass::AuthHint hint(gnome);
   const int exit_code =
       biopass::runAuthHelper("/usr/bin/biopass-helper", arguments,
                              std::chrono::milliseconds(timeout_ms), [&](const std::string& status) {
-                               // One optional hint, only during a slow GNOME authentication.
+                               // One optional hint when the first authentication method starts.
                                // Success messages are deliberately omitted: GNOME queues them and
                                // delays unlock.
-                               const char* message = hint.update(
-                                   status, std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               std::chrono::steady_clock::now() - started));
+                               const char* message = hint.update(status);
                                if (!message)
                                  return true;
                                return pam_info(pamh, "%s", message) == PAM_SUCCESS;
