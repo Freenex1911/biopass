@@ -107,19 +107,17 @@ export function ModelCard({
               <Badge variant="outline">
                 {isDefault ? "Included" : "Imported"}
               </Badge>
-              <div className="flex flex-wrap items-center gap-2">
-                {Boolean(management?.selected_for.length) && (
-                  <Badge variant="secondary">Selected</Badge>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {management?.selected_for.length
-                    ? management.selected_for.join(", ")
-                    : modelTypeLabels[model.model_type]}
-                </span>
-              </div>
+              {Boolean(management?.selected_for.length) && (
+                <Badge variant="secondary">Selected</Badge>
+              )}
               <ModelStatus status={status} />
             </div>
-            <div className="mt-2">
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-xs text-muted-foreground">
+                {management?.selected_for.length
+                  ? management.selected_for.join(", ")
+                  : modelTypeLabels[model.model_type]}
+              </span>
               <ModelFileFolderButton path={model.path} />
             </div>
           </div>
