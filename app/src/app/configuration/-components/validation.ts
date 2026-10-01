@@ -20,6 +20,64 @@ export const biopassConfigSchema = z.object({
     face: z.object({
       enable: z.boolean(),
       camera: z.string().nullable(),
+      camera_selection: z
+        .object({
+          mode: z.enum(["legacy", "priority", "fixed"]),
+          fixed_pair: z.string().nullable(),
+          pairs: z.array(
+            z.object({
+              id: z.string().min(1),
+              name: z.string().trim().min(1, "Give this camera pair a name"),
+              camera: z.string(),
+              ir_camera: z.string(),
+            }),
+          ),
+        })
+        .superRefine((selection, ctx) => {
+          if (selection.mode === "legacy") return;
+          if (!selection.pairs.length) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Add at least one camera pair",
+              path: ["pairs"],
+            });
+          }
+          if (
+            selection.mode === "fixed" &&
+            !selection.pairs.some((p) => p.id === selection.fixed_pair)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Select the fixed camera pair",
+              path: ["fixed_pair"],
+            });
+          }
+          const ids = new Set<string>();
+          selection.pairs.forEach((pair, index) => {
+            if (ids.has(pair.id))
+              ctx.addIssue({
+                code: "custom",
+                message: "Duplicate camera pair",
+                path: ["pairs", index, "id"],
+              });
+            ids.add(pair.id);
+            for (const field of ["camera", "ir_camera"] as const) {
+              if (!pair[field])
+                ctx.addIssue({
+                  code: "custom",
+                  message: "Select a camera",
+                  path: ["pairs", index, field],
+                });
+            }
+            if (pair.camera && pair.camera === pair.ir_camera) {
+              ctx.addIssue({
+                code: "custom",
+                message: "Use different color and IR streams",
+                path: ["pairs", index, "ir_camera"],
+              });
+            }
+          });
+        }),
       retries: z
         .number("Max retries must be a number")
         .int("Max retries must be a whole number")

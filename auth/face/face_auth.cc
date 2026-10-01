@@ -15,6 +15,19 @@
 namespace biopass {
 
 bool FaceAuth::isAvailable() const {
+  if (face_config_.camera_selection.mode != "legacy" && !camera_pair_resolved_) {
+    const auto pair = selectCameraPair(face_config_.camera_selection, resolveCameraSelector);
+    if (!pair) {
+      spdlog::warn("FaceAuth: No complete configured camera pair is available (mode='{}')",
+                   face_config_.camera_selection.mode);
+      return false;
+    }
+    face_config_.camera = pair->camera;
+    face_config_.anti_spoofing.ir_camera = pair->ir_camera;
+    camera_pair_resolved_ = true;
+    spdlog::debug("FaceAuth: Selected camera pair '{}' | RGB='{}' IR='{}'", pair->name,
+                  pair->camera, pair->ir_camera);
+  }
   // Keep the availability probe's stream for the authentication session.
   // Starting and immediately stopping a USB camera is expensive.
   if (!camera_session_ || !camera_session_->isOpen()) {
@@ -101,6 +114,9 @@ void FaceAuth::endAuthenticationSession() {
 
 AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig& config,
                                   std::atomic<bool>* cancel_signal) {
+  if (face_config_.camera_selection.mode != "legacy" && !camera_pair_resolved_ && !isAvailable()) {
+    return AuthResult::Unavailable;
+  }
   if (!camera_session_) {
     camera_session_ = openCameraSession(face_config_.camera);
   }
@@ -143,6 +159,11 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
   ImageRGB face = detectedImages[0].image;
 
   ensureIrSession();
+  if (face_config_.camera_selection.mode != "legacy" &&
+      (!ir_camera_session_ || !ir_camera_session_->isOpen())) {
+    spdlog::error("FaceAuth: Selected camera pair's IR stream could not be opened");
+    return AuthResult::Failure;
+  }
 
   if (!checkAntiSpoof(face_config_, username, face, config, model_registry_, detector_.get(),
                       ir_camera_session_.get())) {
