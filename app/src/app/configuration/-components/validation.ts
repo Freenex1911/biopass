@@ -38,7 +38,7 @@ export const biopassConfigSchema = z.object({
           if (!selection.pairs.length) {
             ctx.addIssue({
               code: "custom",
-              message: "Add at least one camera pair",
+              message: "Add at least one camera",
               path: ["pairs"],
             });
           }
@@ -48,7 +48,7 @@ export const biopassConfigSchema = z.object({
           ) {
             ctx.addIssue({
               code: "custom",
-              message: "Select the fixed camera pair",
+              message: "Select the camera to use",
               path: ["fixed_pair"],
             });
           }
@@ -57,7 +57,7 @@ export const biopassConfigSchema = z.object({
             if (!pair.name.trim())
               ctx.addIssue({
                 code: "custom",
-                message: "Give this camera pair a name",
+                message: "Give this camera a name",
                 path: ["pairs", index, "name"],
               });
             if (ids.has(pair.id))
@@ -67,7 +67,7 @@ export const biopassConfigSchema = z.object({
                 path: ["pairs", index, "id"],
               });
             ids.add(pair.id);
-            for (const field of ["camera", "ir_camera"] as const) {
+            for (const field of ["camera"] as const) {
               if (!pair[field])
                 ctx.addIssue({
                   code: "custom",

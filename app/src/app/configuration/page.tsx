@@ -6,6 +6,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
+import { withCameraSetups } from "@/lib/camera-setups";
 import type { BiopassConfig } from "@/types/config";
 import { MethodConfig } from "./-components/MethodConfig";
 import { StrategyConfig } from "./-components/StrategyConfig";
@@ -50,7 +51,7 @@ function ConfigurationForm({
   initialConfig: BiopassConfig;
 }) {
   const form = useForm<BiopassConfig>({
-    defaultValues: structuredClone(initialConfig),
+    defaultValues: withCameraSetups(initialConfig),
     resolver: zodResolver(biopassConfigSchema),
   });
   const { isSubmitting, isDirty } = form.formState;
@@ -106,16 +107,21 @@ function ConfigurationForm({
         onSubmit={submit}
         className="flex flex-col gap-6 w-full max-w-4xl mx-auto p-6"
       >
-        <div className="flex justify-between items-center">
+        <div className="sticky top-16 z-40 flex flex-wrap gap-4 justify-between items-center rounded-lg bg-background/95 py-3 backdrop-blur-sm">
           <div>
             <h1 className="text-3xl font-bold bg-linear-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-              Biopass Configuration
+              Sign-in settings
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage your authentication methods and execution strategies
+              Set up how you sign in with your face or fingerprint.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {isDirty && (
+              <span role="status" className="text-xs text-muted-foreground">
+                Unsaved changes
+              </span>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -124,7 +130,7 @@ function ConfigurationForm({
               className="flex items-center gap-2 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              Reset
+              Discard changes
             </Button>
             <Button
               type="submit"
@@ -138,8 +144,8 @@ function ConfigurationForm({
         </div>
 
         <div className="grid gap-6">
-          <StrategyConfig />
           <MethodConfig />
+          <StrategyConfig />
         </div>
       </form>
     </FormProvider>

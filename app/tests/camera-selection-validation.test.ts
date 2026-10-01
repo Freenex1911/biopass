@@ -32,4 +32,17 @@ describe("camera selection mode changes", () => {
       schema.safeParse({ mode: "fixed", pairs, fixed_pair: "dock" }).success,
     ).toBe(true);
   });
+  test("IR is optional for either selection policy", () => {
+    for (const mode of ["fixed", "priority"]) {
+      expect(
+        schema.safeParse({
+          mode,
+          fixed_pair: "camera",
+          pairs: [
+            { id: "camera", name: "Camera", camera: "rgb", ir_camera: "" },
+          ],
+        }).success,
+      ).toBe(true);
+    }
+  });
 });

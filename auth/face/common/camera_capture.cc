@@ -119,7 +119,7 @@ std::shared_ptr<libcamera::Camera> findCameraByPath(libcamera::CameraManager& ma
 
 std::shared_ptr<libcamera::Camera> findCamera(
     libcamera::CameraManager& manager, const std::optional<std::string>& linux_video_device_path) {
-  if (linux_video_device_path.has_value()) {
+  if (linux_video_device_path.has_value() && *linux_video_device_path != "auto") {
     constexpr const char* id_prefix = "libcamera:";
     if (linux_video_device_path->rfind(id_prefix, 0) == 0) {
       return manager.get(linux_video_device_path->substr(std::strlen(id_prefix)));

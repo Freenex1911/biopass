@@ -135,24 +135,16 @@ export function FaceCapture({
 
   return (
     <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-      <h4 className="font-medium mb-3 flex items-center gap-2">
-        <Camera className="w-4 h-4" />
-        Camera preview & saved photos
-      </h4>
-
       <div className="grid gap-4">
-        <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-          <img
-            ref={previewRef}
-            alt="Camera preview"
-            className={`w-full h-full object-cover ${capturing ? "" : "hidden"}`}
-          />
-          {!capturing && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-              <Camera className="w-12 h-12 opacity-50" />
-            </div>
-          )}
-        </div>
+        {capturing && (
+          <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+            <img
+              ref={previewRef}
+              alt="Camera preview"
+              className={`w-full h-full object-cover ${capturing ? "" : "hidden"}`}
+            />
+          </div>
+        )}
 
         <div className="flex gap-2">
           {!capturing ? (
@@ -179,6 +171,10 @@ export function FaceCapture({
           )}
         </div>
 
+        <p className="text-xs text-muted-foreground">
+          Saved photos and deletions take effect immediately.
+        </p>
+
         {faceImages.length > 0 && (
           <div>
             <p className="text-sm text-muted-foreground mb-2">
@@ -196,6 +192,7 @@ export function FaceCapture({
                   </div>
                   <button
                     type="button"
+                    aria-label="Delete saved face photo"
                     onClick={() => deleteFace(path)}
                     className="absolute top-1 right-1 p-1 rounded bg-destructive/80 text-destructive-foreground cursor-pointer"
                   >

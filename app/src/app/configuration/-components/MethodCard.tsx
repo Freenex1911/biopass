@@ -1,18 +1,18 @@
 import { ChevronDown } from "lucide-react";
-import type React from "react";
+import { type ReactNode, useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 interface Props {
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   color: string;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   expanded: boolean;
   onExpand: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function MethodCard({
@@ -25,90 +25,56 @@ export function MethodCard({
   onExpand,
   children,
 }: Props) {
+  const panelId = useId();
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-xl border transition-all duration-200",
+        "rounded-xl border",
         expanded
-          ? "border-border bg-muted/30 shadow-md ring-2 ring-primary/20"
-          : "border-border bg-background/50 hover:bg-muted/20 shadow-xs",
+          ? "bg-muted/20 border-primary/30"
+          : "bg-background/50 border-border",
       )}
     >
-      <div className="p-4 flex items-center justify-between gap-4">
-        <div
-          className="flex items-center gap-4 flex-1 cursor-pointer group/header"
+      <div className="p-4 flex items-center gap-4">
+        <button
+          type="button"
           onClick={onExpand}
-          onKeyDown={(e) => e.key === "Enter" && onExpand()}
-          role="button"
-          tabIndex={0}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div
+          <span
             className={cn(
-              "w-10 h-10 rounded-lg bg-linear-to-br flex items-center justify-center transition-transform group-hover/header:scale-110 shadow-sm",
+              "w-10 h-10 shrink-0 rounded-lg bg-linear-to-br flex items-center justify-center",
               color,
             )}
           >
             {icon}
-          </div>
-          <div className="flex-1">
-            <h3 className="font-medium text-sm sm:text-base">{title}</h3>
-            {!expanded && (
-              <Badge
-                variant={enabled ? "default" : "secondary"}
-                className={cn(
-                  "mt-1 text-[10px] h-4 px-1.5 transition-colors",
-                  enabled
-                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {enabled ? "Enabled" : "Disabled"}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        <div
-          className="flex items-center gap-4"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-            <Switch
-              checked={enabled}
-              onCheckedChange={onToggle}
-              className="cursor-pointer"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onExpand();
-            }}
+          </span>
+          <span className="flex-1 min-w-0 grid gap-1">
+            <span className="font-medium text-sm sm:text-base">{title}</span>
+            <Badge
+              variant={enabled ? "default" : "secondary"}
+              className="w-fit text-[10px] h-4 px-1.5"
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </Badge>
+          </span>
+          <ChevronDown
             className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted/80 transition-all cursor-pointer",
-              expanded && "bg-muted/80 rotate-180",
+              "w-4 h-4 shrink-0 transition-transform",
+              expanded && "rotate-180",
             )}
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
-        </div>
+          />
+        </button>
+        <Switch
+          aria-label={`Enable ${title}`}
+          checked={enabled}
+          onCheckedChange={onToggle}
+        />
       </div>
-
-      <div
-        className={cn(
-          "grid transition-all duration-200 ease-in-out",
-          expanded
-            ? "grid-rows-[1fr] opacity-100"
-            : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="overflow-hidden">
-          <div className="px-4 pb-4">{children}</div>
-        </div>
+      <div id={panelId} hidden={!expanded} className="px-4 pb-4">
+        {children}
       </div>
     </div>
   );

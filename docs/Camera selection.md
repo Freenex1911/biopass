@@ -1,17 +1,29 @@
-# Camera selection
+# Cameras and sign-in settings
 
-The face settings support three selection modes:
+Configure each camera once in the shared camera list. Give it a name such as Surface or Dock, choose its color stream, and optionally assign its corresponding IR stream. The camera card shows connection status and whether IR verification is configured; expand Camera settings to edit the assignment.
 
-- **One camera setup:** choose a color camera and an optional IR camera together. Preserves the existing independent camera settings.
-- **Switch automatically:** selects the first configured pair whose color and IR streams are both connected. Put a dock camera first and the built-in camera second to support undocking.
-- **Use a specific pair:** mark the saved pair to use directly in its card. If it is disconnected, face authentication is unavailable.
+With one setup, BioPass uses that setup. With multiple setups, there are two selection policies:
 
-Create pairs by selecting a color stream and its corresponding IR stream, then order the pairs in the settings. BioPass does not infer which streams belong together. Disconnected entries remain saved and can be selected again when reconnected.
+- **Manual:** select the camera to use. If one of its assigned streams is disconnected, face authentication is unavailable.
+- **Automatic:** enable Switch cameras automatically, then order the list by preference. BioPass uses the first setup whose assigned streams are connected. Put the dock first and the built-in camera second for docking and undocking.
 
-New selections store libcamera identities rather than `/dev/videoN` numbers. These identities survive device-number changes, but moving a USB camera to another port or changing the dock topology may change its identity. Refresh the camera list and update the pair after such changes. Existing device-path settings remain supported.
+BioPass does not infer which color and IR streams belong together. A configured IR stream is required for that setup and must pass its check, even when the AI protection is off. Selecting No IR camera explicitly creates a color-only setup. A disconnected IR camera never silently turns IR verification off.
 
-Selection happens before authentication. Once selected, the pair remains fixed for that authentication session. A failed recognition, IR check, or camera start does not cause a switch to another pair. Pair modes require an IR stream even when the AI anti-spoofing model is disabled.
+Selection happens before authentication. Once selected, the setup remains fixed for that session. A failed recognition, IR check, or camera start does not switch to another setup.
 
-The application and authentication helper must be updated together: camera discovery uses the helper's `list-cameras` command.
+## Existing settings and device identities
 
-The liveness section shows the IR check status and configures the independent, optional AI check. Recognition models, thresholds and retry timing are in the expandable advanced settings.
+Old independent settings appear as Main camera in the form. Loading the page does not rewrite the configuration. Saving adopts the setup list while preserving the previous color and IR choices. A previously automatic color camera remains Automatic (existing setting), represented by `camera: auto`; choose a specific color stream to pin it. The backend resolves and pins that stream's identity before authentication too.
+
+New explicit selections store libcamera identities rather than `/dev/videoN` numbers. These identities survive device-number changes, but moving a USB camera to another port or changing the dock topology may change its identity. Refresh the camera list and update the setup after such changes. Existing device-path settings remain supported. Disconnected entries remain saved.
+
+The application and authentication helper must be updated together. Discovery uses the helper's `list-cameras` command.
+
+## Related settings
+
+- **Your face:** preview the selected color camera and manage photos used for recognition. Photo capture and deletion take effect immediately.
+- **Photo & screen protection:** enable an independent AI check on the color image. This does not change IR verification assigned to a camera.
+- **Advanced settings:** detection and recognition models, thresholds, and retry timing.
+- **Sign-in behavior & system integration:** method order or parallel execution, diagnostics, exclusions, and the PAM setup guide.
+
+Use Save to apply sign-in settings. Appearance is a separate, immediate preference: Light, Dark, or Follow system. Follow system stays selected while the displayed colors track the desktop's theme, including changes while the app is open.

@@ -33,9 +33,10 @@ inline std::optional<CameraPairConfig> selectCameraPair(
     if (config.mode == "fixed" && (!config.fixed_pair || pair.id != *config.fixed_pair)) {
       continue;
     }
-    if (!pair.id.empty() && !pair.camera.empty() && !pair.ir_camera.empty()) {
+    if (!pair.id.empty() && !pair.camera.empty()) {
       const auto camera = resolve(pair.camera);
-      const auto ir_camera = resolve(pair.ir_camera);
+      const auto ir_camera =
+          pair.ir_camera.empty() ? std::optional<std::string>{""} : resolve(pair.ir_camera);
       if (camera && ir_camera && *camera != *ir_camera) {
         auto selected = pair;
         selected.camera = *camera;
