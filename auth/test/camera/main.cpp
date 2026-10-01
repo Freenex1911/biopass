@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -114,6 +115,7 @@ int main(int argc, char** argv) {
   std::string output_path = "capture.jpg";
   bool grey = false;
   int warmup_frames = 5;
+  int captures = 1;
   int timeout_ms = 10000;
   // Deprecated aliases retained so existing field scripts keep working.
   int attempts = 0;
@@ -130,6 +132,8 @@ int main(int argc, char** argv) {
   app.add_flag("--grey", grey, "Capture from the camera's GREY/R8 stream (IR cameras).");
   app.add_option("--warmup-frames", warmup_frames, "Frames to discard before capture.")
       ->default_val(warmup_frames);
+  app.add_option("--captures", captures, "Fresh captures from the same session.")
+      ->default_val(captures)->check(CLI::PositiveNumber);
   app.add_option("--timeout-ms", timeout_ms, "Capture deadline in milliseconds.")
       ->default_val(timeout_ms);
   app.add_option("--attempts", attempts,
@@ -178,10 +182,17 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    const ImageRGB image = session->capture();
-    if (image.empty()) {
-      std::cerr << "Capture returned an empty image.\n";
-      return 1;
+    ImageRGB image;
+    for (int i = 0; i < captures; ++i) {
+      const auto start = std::chrono::steady_clock::now();
+      image = session->capture();
+      if (image.empty()) {
+        std::cerr << "Capture returned an empty image.\n";
+        return 1;
+      }
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - start);
+      std::cout << "Capture " << i + 1 << ": " << elapsed.count() << " ms\n";
     }
 
     const fs::path absolute_output_path = fs::absolute(fs::path(output_path));

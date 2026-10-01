@@ -204,7 +204,9 @@ bool negotiate(libcamera::CameraConfiguration& config, CameraCaptureFormat reque
     // instead of failing outright.
     preference = {libcamera::formats::R8, libcamera::formats::YUYV, libcamera::formats::MJPEG};
   } else {
-    preference = {libcamera::formats::YUYV, libcamera::formats::MJPEG, libcamera::formats::R8};
+    // Full-resolution uncompressed USB streams can be limited to 5 FPS.
+    // Prefer the camera's compressed stream to keep capture latency low.
+    preference = {libcamera::formats::MJPEG, libcamera::formats::YUYV, libcamera::formats::R8};
   }
 
   const auto available = formats.pixelformats();
@@ -294,17 +296,16 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
     // never returns a stale frame.
     drainPending();
 
-    // Color sessions warm up once per session (mirrors the always-running
-    // openpnp stream); grey/IR sessions warm up on every capture to let the
-    // IR emitter/AE settle (mirrors the old V4L2 GREY fallback).
-    const int discard_count = (is_grey_ || !warmed_up_) ? warmup_frames_ : 0;
-    warmed_up_ = true;
-    for (int i = 0; i < discard_count; ++i) {
-      libcamera::Request* request = waitForRequest(deadline, has_timeout);
-      if (!request) {
-        return {};
+    // RGB warmup runs during preparation. Preserve per-capture IR warmup:
+    // pulsed emitters may need additional settling after a stream was idle.
+    if (is_grey_) {
+      for (int i = 0; i < ir_warmup_frames_; ++i) {
+        libcamera::Request* request = waitForRequest(deadline, has_timeout);
+        if (!request) {
+          return {};
+        }
+        requeue(request);
       }
-      requeue(request);
     }
 
     libcamera::Request* request = waitForRequest(deadline, has_timeout);
@@ -331,7 +332,8 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
         camera_(std::move(camera)),
         camera_label_(std::move(camera_label)),
         is_grey_(requested_format == CameraCaptureFormat::V4L2Grey),
-        warmup_frames_(std::max(0, warmup_frames)),
+        warmup_remaining_(is_grey_ ? 0 : std::max(0, warmup_frames)),
+        ir_warmup_frames_(is_grey_ ? std::max(0, warmup_frames) : 0),
         capture_timeout_ms_(capture_timeout_ms) {}
 
   bool setup() {
@@ -388,11 +390,32 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
       if (request->status() == libcamera::Request::RequestCancelled) {
         return;
       }
+      bool discard = false;
+      libcamera::Request* superseded = nullptr;
       {
         std::lock_guard<std::mutex> lock(mutex_);
-        completed_.push_back(request);
+        if (warmup_remaining_ > 0) {
+          --warmup_remaining_;
+          discard = true;
+        } else {
+          // Keep only the latest completed frame and recycle older buffers.
+          // Otherwise preparation fills every buffer and stalls the stream,
+          // preventing exposure and pulsed IR illumination from settling.
+          if (!is_grey_ && !completed_.empty()) {
+            superseded = completed_.front();
+            completed_.pop_front();
+          }
+          completed_.push_back(request);
+        }
       }
-      ready_.notify_one();
+      if (superseded) {
+        requeue(superseded);
+      }
+      if (discard) {
+        requeue(request);
+      } else {
+        ready_.notify_one();
+      }
     });
 
     if (camera_->start() < 0) {
@@ -515,9 +538,9 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
   std::shared_ptr<libcamera::Camera> camera_;
   std::string camera_label_;
   bool is_grey_ = false;
-  int warmup_frames_ = 0;
+  int warmup_remaining_ = 0;
+  int ir_warmup_frames_ = 0;
   int capture_timeout_ms_ = 0;
-  bool warmed_up_ = false;
 
   std::unique_ptr<libcamera::CameraConfiguration> config_;
   libcamera::Stream* stream_ = nullptr;
