@@ -9,7 +9,12 @@ function save(config: BiopassConfig) {
   return invokeCommand<void>("save_config", { config });
 }
 
+function saveAppearance(appearance: "system" | "light" | "dark") {
+  return invokeCommand<void>("save_appearance", { appearance });
+}
+
 export const config = {
   load,
   save,
+  saveAppearance,
 };

@@ -8,7 +8,7 @@ pub mod models;
 pub mod paths;
 pub mod system;
 
-use config::{load_config, save_config};
+use config::{load_config, save_appearance, save_config};
 use face::{capture_face, delete_face, list_faces};
 use face_session::{capture_face_in_session, start_face_preview, stop_face_preview};
 use fingerprint::{
@@ -56,6 +56,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
+            save_appearance,
             get_current_username,
             capture_face,
             start_face_preview,
