@@ -2,6 +2,15 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Model, ModelType } from "@/types/config";
 import { invokeCommand } from "./core";
 
+export interface ModelManagement {
+  model: Model;
+  selected_for: string[];
+  delete_block_reason: string | null;
+}
+function listManagement() {
+  return invokeCommand<ModelManagement[]>("list_model_management");
+}
+
 function list(modelType?: ModelType) {
   return invokeCommand<Model[]>("list_models", {
     modelType: modelType ?? null,
@@ -48,6 +57,7 @@ function onDownloadProgress(
 
 export const models = {
   list,
+  listManagement,
   addFromUrl,
   addFromFile,
   remove,

@@ -15,7 +15,10 @@ use fingerprint::{
     add_fingerprint, delete_fingerprint, enroll_fingerprint, fingerprint_is_available,
     list_enrolled_fingerprints, list_fingerprint_devices, remove_fingerprint,
 };
-use models::{add_model_from_file, add_model_from_url, delete_model, list_models, rename_model};
+use models::{
+    add_model_from_file, add_model_from_url, delete_model, list_model_management, list_models,
+    rename_model,
+};
 use system::{get_current_username, list_video_devices};
 
 use tauri::Manager;
@@ -73,6 +76,7 @@ pub fn run() {
             list_enrolled_fingerprints,
             list_fingerprint_devices,
             list_models,
+            list_model_management,
             add_model_from_url,
             add_model_from_file,
             delete_model,

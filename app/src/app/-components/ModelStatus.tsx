@@ -1,7 +1,7 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export type ModelStatusType = "checking" | "available" | "missing" | "inuse";
+export type ModelStatusType = "checking" | "available" | "missing";
 
 interface ModelStatusProps {
   status?: ModelStatusType | boolean;
@@ -24,17 +24,6 @@ export function ModelStatus({
       <Badge variant="secondary" className={`${badgeClass} ${className}`}>
         <Loader2 size={iconSize} className="animate-spin" />
         {isSmall ? "Wait" : "Checking..."}
-      </Badge>
-    );
-  }
-
-  if (status === "inuse") {
-    return (
-      <Badge
-        className={`bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-800 ${badgeClass} ${className}`}
-      >
-        <div className={`${dotClass} rounded-full bg-blue-500 animate-pulse`} />
-        In Use
       </Badge>
     );
   }

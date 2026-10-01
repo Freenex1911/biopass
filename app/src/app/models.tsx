@@ -4,21 +4,36 @@ import { Cpu, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
+import type { ModelManagement } from "@/commands/models";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { modelTypeLabels } from "@/lib/model-types";
 import type { Model } from "@/types/config";
 import { AddModelDialog } from "./-components/AddModelDialog";
 import { ModelStatus, type ModelStatusType } from "./-components/ModelStatus";
 import { RenameModelDialog } from "./-components/RenameModelDialog";
+import {
+  SettingsPageHeader,
+  settingsPageClass,
+} from "./-components/SettingsPage";
 
 interface ModelCardProps {
   model: Model;
   status: ModelStatusType;
+  management?: ModelManagement;
   onRenamed: (model: Model) => void;
   onDelete: (model: Model) => void;
 }
@@ -56,11 +71,18 @@ function ModelFileFolderButton({ path }: { path: string }) {
   );
 }
 
-function ModelCard({ model, status, onRenamed, onDelete }: ModelCardProps) {
+export function ModelCard({
+  model,
+  status,
+  management,
+  onRenamed,
+  onDelete,
+}: ModelCardProps) {
   const isDefault = model.source === "builtin";
-  const deleteDisabled = status === "inuse" || status === "checking";
   const deleteDisabledReason =
-    status === "inuse" ? "Model is currently in use" : undefined;
+    management?.delete_block_reason ??
+    (!management ? "Checking model selection…" : undefined);
+  const deleteDisabled = Boolean(deleteDisabledReason);
 
   return (
     <div className="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-linear-to-b from-card to-muted/20 shadow-sm hover:border-primary/30 hover:shadow-md transition-all duration-300">
@@ -78,18 +100,23 @@ function ModelCard({ model, status, onRenamed, onDelete }: ModelCardProps) {
                 {model.name}
               </h3>
               <p className="text-xs text-muted-foreground capitalize mt-1 block">
-                {model.model_type.replace(/_/g, " ")}
-                {isDefault ? " · Default" : ""}
+                {modelTypeLabels[model.model_type]}
+                {isDefault ? " · Included" : ""}
               </p>
             </div>
             <ModelFileFolderButton path={model.path} />
+            {management?.selected_for.map((role) => (
+              <p key={role} className="text-xs text-muted-foreground mt-1">
+                Selected for {role}
+              </p>
+            ))}
           </div>
         </div>
 
         <div className="flex items-center gap-1">
           <ModelStatus status={status} />
           <RenameModelDialog model={model} onRenamed={onRenamed} />
-          {!isDefault && (
+          {
             <TooltipProvider>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -98,6 +125,7 @@ function ModelCard({ model, status, onRenamed, onDelete }: ModelCardProps) {
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label={`Delete ${model.name}`}
                       disabled={deleteDisabled}
                       onClick={() => onDelete(model)}
                       className="text-destructive hover:text-destructive"
@@ -113,7 +141,7 @@ function ModelCard({ model, status, onRenamed, onDelete }: ModelCardProps) {
                 )}
               </Tooltip>
             </TooltipProvider>
-          )}
+          }
         </div>
       </div>
     </div>
@@ -122,42 +150,29 @@ function ModelCard({ model, status, onRenamed, onDelete }: ModelCardProps) {
 
 function ModelsRouteComponent() {
   const [models, setModels] = useState<Model[]>([]);
+  const [management, setManagement] = useState<Record<string, ModelManagement>>(
+    {},
+  );
+  const [pendingDelete, setPendingDelete] = useState<Model | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusMap, setStatusMap] = useState<
-    Record<string, "checking" | "available" | "missing" | "inuse">
+    Record<string, "checking" | "available" | "missing">
   >({});
 
   const checkModelsStatus = useCallback(async (modelList: Model[]) => {
-    const newStatuses: Record<
-      string,
-      "checking" | "available" | "missing" | "inuse"
-    > = {};
+    const newStatuses: Record<string, "checking" | "available" | "missing"> =
+      {};
 
     for (const model of modelList) newStatuses[model.id] = "checking";
     setStatusMap({ ...newStatuses });
 
     try {
-      const config = await cmd.config.load();
-      const inUseIds = new Set<string>();
-
-      if (config.methods.face.detection.model_id) {
-        inUseIds.add(config.methods.face.detection.model_id);
-      }
-      if (config.methods.face.recognition.model_id) {
-        inUseIds.add(config.methods.face.recognition.model_id);
-      }
-      if (config.methods.face.anti_spoofing.model.model_id) {
-        // Counted as in-use even when anti-spoofing is currently disabled:
-        // re-enabling it later must not resolve to a deleted model.
-        inUseIds.add(config.methods.face.anti_spoofing.model.model_id);
-      }
       const checks = modelList.map(async (model) => {
         try {
           const exists = await cmd.file.exists(model.path);
           if (!exists) {
             newStatuses[model.id] = "missing";
-          } else if (inUseIds.has(model.id)) {
-            newStatuses[model.id] = "inuse";
           } else {
             newStatuses[model.id] = "available";
           }
@@ -176,8 +191,11 @@ function ModelsRouteComponent() {
 
   const loadModels = useCallback(async () => {
     try {
-      setLoading(true);
-      const loadedModels = await cmd.models.list();
+      const entries = await cmd.models.listManagement();
+      setManagement(
+        Object.fromEntries(entries.map((entry) => [entry.model.id, entry])),
+      );
+      const loadedModels = entries.map((entry) => entry.model);
       setModels(loadedModels);
       await checkModelsStatus(loadedModels);
     } catch (err) {
@@ -189,25 +207,32 @@ function ModelsRouteComponent() {
   }, [checkModelsStatus]);
 
   useEffect(() => {
-    loadModels();
+    void loadModels();
+    const refresh = () => void loadModels();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [loadModels]);
 
   function handleModelUpdated(updated: Model) {
     setModels((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
   }
 
-  function handleModelAdded(added: Model) {
-    setModels((prev) => [...prev, added]);
-    checkModelsStatus([...models, added]);
+  function handleModelAdded(_added: Model) {
+    void loadModels();
   }
 
   async function handleDelete(model: Model) {
+    setDeleting(true);
     try {
       await cmd.models.remove(model.id);
       toast.success("Model deleted");
+      setPendingDelete(null);
       setModels((prev) => prev.filter((m) => m.id !== model.id));
     } catch (err) {
       toast.error(`Failed to delete model: ${err}`);
+      void loadModels();
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -220,18 +245,45 @@ function ModelsRouteComponent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full max-width-4xl mx-auto p-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold bg-linear-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-            AI Model Management
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            View, add, rename, and remove AI models used for authentication.
-          </p>
-        </div>
+    <div className={settingsPageClass}>
+      <SettingsPageHeader
+        title="AI models"
+        description="Manage models selected in sign-in settings. Included and selected models are protected from deletion."
+      >
         <AddModelDialog onAdded={handleModelAdded} />
-      </div>
+      </SettingsPageHeader>
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {pendingDelete?.name}?</DialogTitle>
+            <DialogDescription>
+              The imported model will be removed from BioPass. Its managed model
+              file will also be deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => pendingDelete && void handleDelete(pendingDelete)}
+            >
+              {deleting ? "Deleting…" : "Delete model"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col gap-4">
         {models.length === 0 ? (
@@ -247,8 +299,9 @@ function ModelsRouteComponent() {
               key={model.id}
               model={model}
               status={statusMap[model.id]}
+              management={management[model.id]}
               onRenamed={handleModelUpdated}
-              onDelete={handleDelete}
+              onDelete={setPendingDelete}
             />
           ))
         )}

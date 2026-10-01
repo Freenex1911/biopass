@@ -8,6 +8,10 @@ import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
 import { withCameraSetups } from "@/lib/camera-setups";
 import type { BiopassConfig } from "@/types/config";
+import {
+  SettingsPageHeader,
+  settingsPageClass,
+} from "../-components/SettingsPage";
 import { MethodConfig } from "./-components/MethodConfig";
 import { StrategyConfig } from "./-components/StrategyConfig";
 import { biopassConfigSchema, validateConfig } from "./-components/validation";
@@ -103,19 +107,11 @@ function ConfigurationForm({
 
   return (
     <FormProvider {...form}>
-      <form
-        onSubmit={submit}
-        className="flex flex-col gap-6 w-full max-w-4xl mx-auto p-6"
-      >
-        <div className="sticky top-16 z-40 flex flex-wrap gap-4 justify-between items-center rounded-lg bg-background/95 py-3 backdrop-blur-sm">
-          <div>
-            <h1 className="text-3xl font-bold bg-linear-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-              Sign-in settings
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Set up how you sign in with your face or fingerprint.
-            </p>
-          </div>
+      <form onSubmit={submit} className={settingsPageClass}>
+        <SettingsPageHeader
+          title="Sign-in settings"
+          description="Set up how you sign in with your face or fingerprint."
+        >
           <div className="flex gap-2 items-center">
             {isDirty && (
               <span role="status" className="text-xs text-muted-foreground">
@@ -141,7 +137,7 @@ function ConfigurationForm({
               {isSubmitting ? "Saving..." : "Save"}
             </Button>
           </div>
-        </div>
+        </SettingsPageHeader>
 
         <div className="grid gap-6">
           <MethodConfig />
