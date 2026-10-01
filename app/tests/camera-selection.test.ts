@@ -84,4 +84,40 @@ describe("camera pair status and preview", () => {
       ),
     ).toBeUndefined();
   });
+  test("an explicitly color-only setup does not require an IR stream", () => {
+    expect(
+      selectAvailableCameraPair(
+        { ...selection, pairs: [{ ...selection.pairs[1], ir_camera: "" }] },
+        [surface[0]],
+      )?.id,
+    ).toBe("surface");
+    expect(
+      selectAvailableCameraPair({ ...selection, pairs: [selection.pairs[1]] }, [
+        surface[0],
+      ]),
+    ).toBeUndefined();
+  });
+  test("migrated automatic color settings use the backend's first stream", () => {
+    expect(
+      selectAvailableCameraPair(
+        { ...selection, pairs: [{ ...selection.pairs[1], camera: "auto" }] },
+        surface,
+      )?.id,
+    ).toBe("surface");
+    expect(
+      selectAvailableCameraPair(
+        {
+          ...selection,
+          pairs: [
+            {
+              ...selection.pairs[1],
+              camera: "auto",
+              ir_camera: "libcamera:surface-rgb",
+            },
+          ],
+        },
+        surface,
+      ),
+    ).toBeUndefined();
+  });
 });

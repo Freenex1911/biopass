@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Zap } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 
@@ -85,15 +85,150 @@ export function StrategyConfig() {
   }
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 shadow-lg">
-      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-        <span className="w-8 h-8 rounded-lg bg-linear-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-white" />
-        </span>
-        Strategy Settings
-      </h2>
+    <details className="rounded-xl border border-border/50 bg-card/50 p-5">
+      <summary className="cursor-pointer font-semibold">
+        Sign-in behavior & system integration
+      </summary>
+      <div className="grid gap-6 mt-5">
+        <div className="grid gap-4">
+          <h3 className="text-sm font-medium">
+            How sign-in methods work together
+          </h3>
+          <div className="grid gap-2.5">
+            <Label className="text-sm font-medium text-muted-foreground">
+              Sign-in behavior
+            </Label>
+            <Select
+              value={strategyConfig.execution_mode}
+              onValueChange={(value) =>
+                setValue(
+                  "strategy.execution_mode",
+                  value as "sequential" | "parallel",
+                  {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  },
+                )
+              }
+            >
+              <SelectTrigger className="w-full h-10 transition-all">
+                <SelectValue placeholder="Select execution mode" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="sequential" className="cursor-pointer">
+                  Try methods in order
+                </SelectItem>
+                <SelectItem value="parallel" className="cursor-pointer">
+                  Try methods together
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {strategyConfig.execution_mode === "sequential"
+                ? "Methods are tried in order until one succeeds"
+                : "All methods run simultaneously, first success wins"}
+            </p>
+          </div>
 
-      <div className="grid gap-6">
+          {/* Method Order - Only show in sequential mode */}
+          {strategyConfig.execution_mode === "sequential" && (
+            <div className="grid gap-2.5">
+              <Label className="text-sm font-medium text-muted-foreground">
+                Method order
+                <span className="text-xs text-muted-foreground/70 ml-2">
+                  (drag to reorder)
+                </span>
+              </Label>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={strategyConfig.order}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex flex-col gap-2">
+                    {strategyConfig.order.map((method, index) => (
+                      <SortableMethodItem
+                        key={method}
+                        id={method}
+                        index={index}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </div>
+          )}
+        </div>
+        <details className="rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Troubleshooting & service exclusions
+          </summary>
+          <div className="grid gap-4 mt-4">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
+              <div className="grid gap-0.5">
+                <Label
+                  htmlFor="debug-enabled"
+                  className="text-sm font-medium flex items-center gap-2"
+                >
+                  Verbose Debug Logging
+                </Label>
+                <p className="text-xs text-muted-foreground max-w-100">
+                  Enable detailed console output for authentication methods.
+                  Useful for troubleshooting.
+                </p>
+              </div>
+              <Switch
+                id="debug-enabled"
+                checked={strategyConfig.debug}
+                onCheckedChange={(checked) =>
+                  setValue("strategy.debug", checked, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
+            </div>
+
+            <div className="grid gap-2.5">
+              <Label
+                htmlFor="ignored-services"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Ignored PAM Services (optional)
+              </Label>
+              <Input
+                id="ignored-services"
+                value={ignoredServicesInput}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const ignoreServices = parseIgnoredServicesInput(value);
+
+                  setIgnoredServicesInput(value);
+                  if (
+                    areServicesEqual(
+                      ignoreServices,
+                      strategyConfig.ignore_services,
+                    )
+                  ) {
+                    return;
+                  }
+
+                  setValue("strategy.ignore_services", ignoreServices, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma-separated PAM service names to bypass Biopass. Example:{" "}
+                <code>polkit-1</code>, <code>pkexec</code> or <code>sudo</code>.
+              </p>
+            </div>
+          </div>
+        </details>
         <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
           <Label className="text-sm font-semibold">System Sign-in Setup</Label>
           <p className="text-xs text-muted-foreground mt-1 max-w-140">
@@ -107,137 +242,11 @@ export function StrategyConfig() {
             rel="noreferrer"
             className="inline-block mt-2 text-xs text-primary hover:underline break-all"
           >
-            {PAM_MANUAL_SETUP_GUIDE_URL}
+            Read the system sign-in setup guide
           </a>
         </div>
-
-        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
-          <div className="grid gap-0.5">
-            <Label
-              htmlFor="debug-enabled"
-              className="text-sm font-medium flex items-center gap-2"
-            >
-              Verbose Debug Logging
-            </Label>
-            <p className="text-xs text-muted-foreground max-w-100">
-              Enable detailed console output for authentication methods. Useful
-              for troubleshooting.
-            </p>
-          </div>
-          <Switch
-            id="debug-enabled"
-            checked={strategyConfig.debug}
-            onCheckedChange={(checked) =>
-              setValue("strategy.debug", checked, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          />
-        </div>
-
-        <div className="grid gap-2.5">
-          <Label className="text-sm font-medium text-muted-foreground">
-            Execution Mode
-          </Label>
-          <Select
-            value={strategyConfig.execution_mode}
-            onValueChange={(value) =>
-              setValue(
-                "strategy.execution_mode",
-                value as "sequential" | "parallel",
-                {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                },
-              )
-            }
-          >
-            <SelectTrigger className="w-full h-10 transition-all">
-              <SelectValue placeholder="Select execution mode" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="sequential" className="cursor-pointer">
-                Sequential
-              </SelectItem>
-              <SelectItem value="parallel" className="cursor-pointer">
-                Parallel
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            {strategyConfig.execution_mode === "sequential"
-              ? "Methods are tried in order until one succeeds"
-              : "All methods run simultaneously, first success wins"}
-          </p>
-        </div>
-
-        {/* Method Order - Only show in sequential mode */}
-        {strategyConfig.execution_mode === "sequential" && (
-          <div className="grid gap-2.5">
-            <Label className="text-sm font-medium text-muted-foreground">
-              Method Priority Order
-              <span className="text-xs text-muted-foreground/70 ml-2">
-                (drag to reorder)
-              </span>
-            </Label>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={strategyConfig.order}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="flex flex-col gap-2">
-                  {strategyConfig.order.map((method, index) => (
-                    <SortableMethodItem
-                      key={method}
-                      id={method}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
-        )}
-
-        <div className="grid gap-2.5">
-          <Label
-            htmlFor="ignored-services"
-            className="text-sm font-medium text-muted-foreground"
-          >
-            Ignored PAM Services (optional)
-          </Label>
-          <Input
-            id="ignored-services"
-            value={ignoredServicesInput}
-            onChange={(event) => {
-              const value = event.target.value;
-              const ignoreServices = parseIgnoredServicesInput(value);
-
-              setIgnoredServicesInput(value);
-              if (
-                areServicesEqual(ignoreServices, strategyConfig.ignore_services)
-              ) {
-                return;
-              }
-
-              setValue("strategy.ignore_services", ignoreServices, {
-                shouldDirty: true,
-                shouldValidate: true,
-              });
-            }}
-          />
-          <p className="text-xs text-muted-foreground">
-            Comma-separated PAM service names to bypass Biopass. Example:{" "}
-            <code>polkit-1</code>, <code>pkexec</code> or <code>sudo</code>.
-          </p>
-        </div>
       </div>
-    </div>
+    </details>
   );
 }
 

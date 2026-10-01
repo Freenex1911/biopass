@@ -83,15 +83,15 @@ fn validate_camera_selection(selection: &CameraSelectionConfig) -> Result<(), St
         return Ok(());
     }
     if selection.pairs.is_empty() {
-        return Err("Add at least one camera pair".into());
+        return Err("Add at least one camera setup".into());
     }
     let mut ids = std::collections::HashSet::new();
     for pair in &selection.pairs {
         if pair.id.is_empty() || !ids.insert(&pair.id) {
             return Err("Camera pair IDs must be unique and nonempty".into());
         }
-        if pair.name.trim().is_empty() || pair.camera.is_empty() || pair.ir_camera.is_empty() {
-            return Err("Each camera pair needs a name, color camera and IR camera".into());
+        if pair.name.trim().is_empty() || pair.camera.is_empty() {
+            return Err("Each camera setup needs a name and color camera".into());
         }
         if pair.camera == pair.ir_camera {
             return Err("Use different color and IR streams".into());
@@ -103,7 +103,7 @@ fn validate_camera_selection(selection: &CameraSelectionConfig) -> Result<(), St
             .iter()
             .any(|pair| Some(&pair.id) == selection.fixed_pair.as_ref())
     {
-        return Err("Select the fixed camera pair".into());
+        return Err("Select the camera to use".into());
     }
     Ok(())
 }
@@ -278,6 +278,23 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn color_only_setups_are_valid_but_color_stream_is_required() {
+        let mut selection = CameraSelectionConfig {
+            mode: CameraSelectionMode::Fixed,
+            fixed_pair: Some("camera".into()),
+            pairs: vec![CameraPairConfig {
+                id: "camera".into(),
+                name: "Camera".into(),
+                camera: "libcamera:rgb".into(),
+                ir_camera: String::new(),
+            }],
+        };
+        assert!(validate_camera_selection(&selection).is_ok());
+        selection.pairs[0].camera.clear();
+        assert!(validate_camera_selection(&selection).is_err());
+    }
 
     #[test]
     fn existing_configs_preserve_individual_camera_settings() {

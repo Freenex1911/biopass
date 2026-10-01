@@ -23,7 +23,8 @@ bool FaceAuth::isAvailable() const {
       return false;
     }
     face_config_.camera = pair->camera;
-    face_config_.anti_spoofing.ir_camera = pair->ir_camera;
+    face_config_.anti_spoofing.ir_camera =
+        pair->ir_camera.empty() ? std::nullopt : std::optional<std::string>{pair->ir_camera};
     camera_pair_resolved_ = true;
     spdlog::debug("FaceAuth: Selected camera pair '{}' | RGB='{}' IR='{}'", pair->name,
                   pair->camera, pair->ir_camera);
@@ -160,6 +161,7 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
 
   ensureIrSession();
   if (face_config_.camera_selection.mode != "legacy" &&
+      face_config_.anti_spoofing.ir_camera.has_value() &&
       (!ir_camera_session_ || !ir_camera_session_->isOpen())) {
     spdlog::error("FaceAuth: Selected camera pair's IR stream could not be opened");
     return AuthResult::Failure;

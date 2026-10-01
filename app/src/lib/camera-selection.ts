@@ -20,8 +20,13 @@ export function selectAvailableCameraPair(
       ? selection.pairs.filter((pair) => pair.id === selection.fixed_pair)
       : selection.pairs;
   return candidates.find((pair) => {
-    const camera = devices.find((device) => cameraMatches(device, pair.camera));
+    const camera =
+      pair.camera === "auto"
+        ? devices[0]
+        : devices.find((device) => cameraMatches(device, pair.camera));
     const ir = devices.find((device) => cameraMatches(device, pair.ir_camera));
-    return camera && ir && camera.stable_id !== ir.stable_id;
+    return (
+      camera && (!pair.ir_camera || (ir && camera.stable_id !== ir.stable_id))
+    );
   });
 }

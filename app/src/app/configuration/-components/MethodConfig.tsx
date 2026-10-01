@@ -7,13 +7,18 @@ import type { BiopassConfig } from "@/types/config";
 import { FingerprintSetting } from "./FingerprintSetting";
 import { FaceSetting } from "./face/FaceSetting";
 import { MethodCard } from "./MethodCard";
+import { SettingsDisclosure } from "./SettingsDisclosure";
 
 function parseNumberInput(value: string): number {
   return value === "" ? Number.NaN : Number(value);
 }
 
 export function MethodConfig() {
-  const { control, setValue } = useFormContext<BiopassConfig>();
+  const {
+    control,
+    setValue,
+    formState: { errors },
+  } = useFormContext<BiopassConfig>();
   const faceConfig = useWatch<BiopassConfig, "methods.face">({
     name: "methods.face",
   });
@@ -58,7 +63,7 @@ export function MethodConfig() {
             setExpandedMethod(expandedMethod === "face" ? null : "face")
           }
         >
-          <FaceSetting />
+          <FaceSetting active={expandedMethod === "face"} />
         </MethodCard>
 
         <MethodCard
@@ -80,77 +85,84 @@ export function MethodConfig() {
           }
         >
           <div className="grid gap-4 pt-4">
-            <div className="grid grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="fingerprint-max-retries"
-                  className="text-sm font-medium text-muted-foreground"
-                >
-                  Max Retries
-                </Label>
-                <Controller
-                  control={control}
-                  name="methods.fingerprint.retries"
-                  render={({ field, fieldState }) => (
-                    <>
-                      <Input
-                        id="fingerprint-max-retries"
-                        type="number"
-                        min={1}
-                        value={Number.isNaN(field.value) ? "" : field.value}
-                        onChange={(e) =>
-                          field.onChange(parseNumberInput(e.target.value))
-                        }
-                        aria-invalid={fieldState.invalid}
-                        className="h-10"
-                      />
-                      {fieldState.error && (
-                        <p className="text-xs text-destructive">
-                          {fieldState.error.message}
-                        </p>
-                      )}
-                    </>
-                  )}
-                />
+            <FingerprintSetting />
+            <SettingsDisclosure
+              title="Advanced settings"
+              className="rounded-lg border p-4"
+              hasErrors={Boolean(
+                errors.methods?.fingerprint?.retries ||
+                  errors.methods?.fingerprint?.timeout,
+              )}
+            >
+              <div className="grid sm:grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="fingerprint-max-retries"
+                    className="text-sm font-medium text-muted-foreground"
+                  >
+                    Max Retries
+                  </Label>
+                  <Controller
+                    control={control}
+                    name="methods.fingerprint.retries"
+                    render={({ field, fieldState }) => (
+                      <>
+                        <Input
+                          id="fingerprint-max-retries"
+                          type="number"
+                          min={1}
+                          value={Number.isNaN(field.value) ? "" : field.value}
+                          onChange={(e) =>
+                            field.onChange(parseNumberInput(e.target.value))
+                          }
+                          aria-invalid={fieldState.invalid}
+                          className="h-10"
+                        />
+                        {fieldState.error && (
+                          <p className="text-xs text-destructive">
+                            {fieldState.error.message}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="fingerprint-timeout"
+                    className="text-sm font-medium text-muted-foreground"
+                  >
+                    Timeout (ms)
+                  </Label>
+                  <Controller
+                    control={control}
+                    name="methods.fingerprint.timeout"
+                    render={({ field, fieldState }) => (
+                      <>
+                        <Input
+                          id="fingerprint-timeout"
+                          type="number"
+                          min="0"
+                          max="5000"
+                          step="100"
+                          value={Number.isNaN(field.value) ? "" : field.value}
+                          onChange={(e) =>
+                            field.onChange(parseNumberInput(e.target.value))
+                          }
+                          aria-invalid={fieldState.invalid}
+                          className="h-10"
+                        />
+                        {fieldState.error && (
+                          <p className="text-xs text-destructive">
+                            {fieldState.error.message}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="fingerprint-timeout"
-                  className="text-sm font-medium text-muted-foreground"
-                >
-                  Timeout (ms)
-                </Label>
-                <Controller
-                  control={control}
-                  name="methods.fingerprint.timeout"
-                  render={({ field, fieldState }) => (
-                    <>
-                      <Input
-                        id="fingerprint-timeout"
-                        type="number"
-                        min="0"
-                        max="5000"
-                        step="100"
-                        value={Number.isNaN(field.value) ? "" : field.value}
-                        onChange={(e) =>
-                          field.onChange(parseNumberInput(e.target.value))
-                        }
-                        aria-invalid={fieldState.invalid}
-                        className="h-10"
-                      />
-                      {fieldState.error && (
-                        <p className="text-xs text-destructive">
-                          {fieldState.error.message}
-                        </p>
-                      )}
-                    </>
-                  )}
-                />
-              </div>
-            </div>
-            <div className="overflow-hidden">
-              <FingerprintSetting />
-            </div>
+            </SettingsDisclosure>
           </div>
         </MethodCard>
       </div>
