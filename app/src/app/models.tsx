@@ -102,36 +102,21 @@ export function ModelCard({
               >
                 {model.name}
               </h3>
-              <p className="text-xs text-muted-foreground">
-                {modelTypeLabels[model.model_type]}
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <Badge variant="outline">
                 {isDefault ? "Included" : "Imported"}
               </Badge>
-              {Boolean(management?.selected_for.length) && (
-                <TooltipProvider>
-                  <Tooltip delayDuration={300}>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="secondary"
-                        tabIndex={0}
-                        aria-label={`Selected for ${management?.selected_for.join(", ")}`}
-                      >
-                        {management?.selected_for.every((role) =>
-                          role.endsWith(" (off)"),
-                        )
-                          ? "Selected (off)"
-                          : "Selected"}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      Selected for {management?.selected_for.join(", ")}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {Boolean(management?.selected_for.length) && (
+                  <Badge variant="secondary">Selected</Badge>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {management?.selected_for.length
+                    ? management.selected_for.join(", ")
+                    : modelTypeLabels[model.model_type]}
+                </span>
+              </div>
               <ModelStatus status={status} />
             </div>
             <div className="mt-2">
