@@ -111,18 +111,32 @@ export function ModelCard({
                 {isDefault ? "Included" : "Imported"}
               </Badge>
               {Boolean(management?.selected_for.length) && (
-                <Badge variant="secondary">Selected</Badge>
+                <TooltipProvider>
+                  <Tooltip delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="secondary"
+                        tabIndex={0}
+                        aria-label={`Selected for ${management?.selected_for.join(", ")}`}
+                      >
+                        {management?.selected_for.every((role) =>
+                          role.endsWith(" (off)"),
+                        )
+                          ? "Selected (off)"
+                          : "Selected"}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      Selected for {management?.selected_for.join(", ")}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <ModelStatus status={status} />
             </div>
             <div className="mt-2">
               <ModelFileFolderButton path={model.path} />
             </div>
-            {management?.selected_for.map((role) => (
-              <p key={role} className="text-xs text-muted-foreground mt-1">
-                {role}
-              </p>
-            ))}
           </div>
         </div>
 
