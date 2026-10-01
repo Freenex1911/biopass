@@ -230,6 +230,23 @@ bool negotiate(libcamera::CameraConfiguration& config, CameraCaptureFormat reque
     return false;
   }
 
+  if (requested_format == CameraCaptureFormat::Default) {
+    // StillCapture defaults to the largest sensor mode. A 720p RGB stream is
+    // sufficient for the face models and leaves USB bandwidth for a paired IR
+    // sensor. Select an advertised mode rather than an unsupported arbitrary size.
+    const auto sizes = formats.sizes(stream_config.pixelFormat);
+    constexpr uint64_t pixel_budget = 1280 * 720;
+    std::optional<libcamera::Size> preferred;
+    for (const auto& size : sizes) {
+      const uint64_t area = static_cast<uint64_t>(size.width) * size.height;
+      if (area <= pixel_budget &&
+          (!preferred || area > static_cast<uint64_t>(preferred->width) * preferred->height))
+        preferred = size;
+    }
+    if (preferred)
+      stream_config.size = *preferred;
+  }
+
   const auto validation = config.validate();
   if (validation == libcamera::CameraConfiguration::Invalid) {
     spdlog::error("FaceAuth: Invalid camera configuration for '{}'", camera_label);
