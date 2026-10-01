@@ -27,7 +27,7 @@ export const biopassConfigSchema = z.object({
           pairs: z.array(
             z.object({
               id: z.string().min(1),
-              name: z.string().trim().min(1, "Give this camera pair a name"),
+              name: z.string(),
               camera: z.string(),
               ir_camera: z.string(),
             }),
@@ -54,6 +54,12 @@ export const biopassConfigSchema = z.object({
           }
           const ids = new Set<string>();
           selection.pairs.forEach((pair, index) => {
+            if (!pair.name.trim())
+              ctx.addIssue({
+                code: "custom",
+                message: "Give this camera pair a name",
+                path: ["pairs", index, "name"],
+              });
             if (ids.has(pair.id))
               ctx.addIssue({
                 code: "custom",

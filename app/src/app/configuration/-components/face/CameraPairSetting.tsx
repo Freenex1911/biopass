@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -26,11 +28,13 @@ export function CameraPairSetting({
   refresh,
   loading,
   discoveryError,
+  children,
 }: {
   devices: VideoDeviceInfo[];
   refresh: () => void;
   loading: boolean;
   discoveryError: string | null;
+  children: ReactNode;
 }) {
   const {
     control,
@@ -111,7 +115,9 @@ export function CameraPairSetting({
   return (
     <div className="grid gap-4 rounded-lg border border-border/50 bg-muted/50 p-4">
       <div className="flex items-center justify-between gap-3">
-        <Label htmlFor="camera-selection-mode">Camera selection</Label>
+        <h4 id="camera-selection-heading" className="font-medium text-sm">
+          Cameras
+        </h4>
         <Button
           type="button"
           variant="outline"
@@ -123,23 +129,51 @@ export function CameraPairSetting({
           Refresh cameras
         </Button>
       </div>
-      <Select
+      <RadioGroup
+        aria-labelledby="camera-selection-heading"
         value={selection.mode}
         onValueChange={(mode) =>
           update({ ...selection, mode: mode as CameraSelectionConfig["mode"] })
         }
       >
-        <SelectTrigger id="camera-selection-mode" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="legacy">Individual camera settings</SelectItem>
-          <SelectItem value="priority">
-            Camera pairs in priority order
-          </SelectItem>
-          <SelectItem value="fixed">Only one configured camera pair</SelectItem>
-        </SelectContent>
-      </Select>
+        {[
+          {
+            value: "legacy",
+            title: "One camera setup",
+            description: "Choose a color camera and, optionally, an IR camera.",
+          },
+          {
+            value: "priority",
+            title: "Switch automatically",
+            description:
+              "Use the first connected pair in your list. Useful when docking and undocking.",
+          },
+          {
+            value: "fixed",
+            title: "Use a specific pair",
+            description: "Choose one saved pair. Other pairs will not be used.",
+          },
+        ].map((mode) => (
+          <Label
+            key={mode.value}
+            htmlFor={`camera-mode-${mode.value}`}
+            className="flex items-start gap-3 rounded-md border bg-background p-3 cursor-pointer"
+          >
+            <RadioGroupItem
+              id={`camera-mode-${mode.value}`}
+              value={mode.value}
+              className="mt-0.5"
+            />
+            <span className="grid gap-1">
+              <span className="font-medium">{mode.title}</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                {mode.description}
+              </span>
+            </span>
+          </Label>
+        ))}
+      </RadioGroup>
+      {selection.mode === "legacy" && children}
       {discoveryError && (
         <p role="alert" className="text-sm text-destructive">
           {discoveryError}
@@ -150,54 +184,54 @@ export function CameraPairSetting({
           <p className="text-sm text-muted-foreground">
             {selection.mode === "priority"
               ? "Use the first pair with both cameras connected. Put your dock camera before the built-in pair."
-              : "Use only the pair selected below, even when another pair is connected."}
+              : "Select “Use” on the pair you want to use. Both its color and IR camera must be connected."}
           </p>
-          {selection.mode === "fixed" && (
-            <div className="grid gap-2">
-              <Label htmlFor="fixed-camera-pair">Fixed pair</Label>
-              <Select
-                value={selection.fixed_pair || "__none__"}
-                onValueChange={(fixed_pair) =>
-                  update({ ...selection, fixed_pair })
-                }
-              >
-                <SelectTrigger id="fixed-camera-pair" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__" disabled>
-                    Select a pair
-                  </SelectItem>
-                  {selection.pairs.map((pair) => (
-                    <SelectItem key={pair.id} value={pair.id}>
-                      {pair.name || "Unnamed pair"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {pairErrors?.fixed_pair?.message && (
-                <p className="text-xs text-destructive">
-                  {pairErrors.fixed_pair.message}
-                </p>
-              )}
-            </div>
+          {selection.mode === "fixed" && pairErrors?.fixed_pair?.message && (
+            <p className="text-xs text-destructive">
+              {pairErrors.fixed_pair.message}
+            </p>
           )}
           <p
-            className={selected ? "text-sm" : "text-sm text-destructive"}
+            className={
+              selected || !selection.pairs.length
+                ? "text-sm"
+                : "text-sm text-destructive"
+            }
             role="status"
           >
             {selected
-              ? `Available pair: ${selected.name}`
-              : "No complete configured pair is connected. Face authentication will be unavailable."}
+              ? `Currently selected: ${selected.name || "Unnamed pair"}`
+              : !selection.pairs.length
+                ? "Add a camera pair to get started."
+                : "No complete configured pair is connected. Face authentication will be unavailable."}
           </p>
           {selection.pairs.map((pair, index) => (
             <div
               key={pair.id}
               className="grid gap-3 rounded-md border bg-background p-3"
             >
+              {selection.mode === "fixed" && (
+                <Label
+                  htmlFor={`${pair.id}-use`}
+                  className="flex items-center gap-2 cursor-pointer text-sm"
+                >
+                  <input
+                    id={`${pair.id}-use`}
+                    type="radio"
+                    name="fixed-camera-pair"
+                    value={pair.id}
+                    checked={selection.fixed_pair === pair.id}
+                    onChange={() =>
+                      update({ ...selection, fixed_pair: pair.id })
+                    }
+                    className="accent-primary"
+                  />
+                  Use {pair.name || "this pair"}
+                </Label>
+              )}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {index + 1}.
+                  {selection.mode === "priority" ? `${index + 1}.` : ""}
                 </span>
                 <Label htmlFor={`${pair.id}-name`} className="sr-only">
                   Pair name
@@ -209,26 +243,30 @@ export function CameraPairSetting({
                   placeholder="Pair name, e.g. Dock or Built-in"
                   onChange={(e) => updatePair(index, { name: e.target.value })}
                 />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Move ${pair.name} up`}
-                  disabled={index === 0}
-                  onClick={() => move(index, -1)}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Move ${pair.name} down`}
-                  disabled={index === selection.pairs.length - 1}
-                  onClick={() => move(index, 1)}
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
+                {selection.mode === "priority" && (
+                  <>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move ${pair.name} up`}
+                      disabled={index === 0}
+                      onClick={() => move(index, -1)}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move ${pair.name} down`}
+                      disabled={index === selection.pairs.length - 1}
+                      onClick={() => move(index, 1)}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
                 <Button
                   type="button"
                   size="icon"
@@ -253,6 +291,16 @@ export function CameraPairSetting({
                   {pairErrors.pairs[index]?.name?.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                {selectAvailableCameraPair(
+                  { ...selection, mode: "fixed", fixed_pair: pair.id },
+                  devices,
+                )
+                  ? selected?.id === pair.id
+                    ? "Connected · selected for login"
+                    : "Connected"
+                  : "Incomplete or disconnected"}
+              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {cameraSelect(pair, index, "camera")}
                 {cameraSelect(pair, index, "ir_camera")}
@@ -283,7 +331,9 @@ export function CameraPairSetting({
             Add camera pair
           </Button>
           <p className="text-xs text-muted-foreground">
-            A failed face or IR check never switches to another pair.
+            Each pair needs a color and an IR stream from the same camera.
+            Switching only handles disconnected pairs before login; a failed
+            face or IR check does not switch cameras.
           </p>
         </>
       )}

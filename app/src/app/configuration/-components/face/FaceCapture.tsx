@@ -1,7 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Camera, Circle, Square, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
@@ -18,14 +18,14 @@ export function FaceCapture({
   const runningCamera = useRef<string | null | undefined>(undefined);
   const [faceImages, setFaceImages] = useState<string[]>([]);
 
-  async function loadFaceImages() {
+  const loadFaceImages = useCallback(async () => {
     try {
       const images = await cmd.face.listImages();
       setFaceImages(images);
     } catch (err) {
       console.error("Failed to load face images:", err);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadFaceImages();
@@ -137,7 +137,7 @@ export function FaceCapture({
     <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
       <h4 className="font-medium mb-3 flex items-center gap-2">
         <Camera className="w-4 h-4" />
-        Face Capture
+        Camera preview & saved photos
       </h4>
 
       <div className="grid gap-4">
@@ -163,13 +163,13 @@ export function FaceCapture({
               className="flex-1"
             >
               <Camera className="w-4 h-4 mr-2" />
-              Start Camera
+              Start preview
             </Button>
           ) : (
             <>
               <Button type="button" onClick={capturePhoto} className="flex-1">
                 <Circle className="w-4 h-4 mr-2" />
-                Capture
+                Save face photo
               </Button>
               <Button type="button" variant="outline" onClick={stopCamera}>
                 <Square className="w-4 h-4 mr-2" />

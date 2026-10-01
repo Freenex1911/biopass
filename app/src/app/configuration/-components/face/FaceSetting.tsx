@@ -117,10 +117,10 @@ export function FaceSetting() {
   );
   const unavailableCameraDeviceOption = "__unavailable_camera_device__";
   const cameraValue = config.camera
-    ? (selectedCamera?.path ?? unavailableCameraDeviceOption)
+    ? (selectedCamera?.stable_id ?? unavailableCameraDeviceOption)
     : disabledOption;
   const irCameraValue = config.anti_spoofing.ir_camera
-    ? (selectedIrCamera?.path ?? unavailableIrDeviceOption)
+    ? (selectedIrCamera?.stable_id ?? unavailableIrDeviceOption)
     : disabledOption;
 
   const aiModelValue = config.anti_spoofing.enable
@@ -142,211 +142,150 @@ export function FaceSetting() {
         refresh={() => void fetchDevices()}
         loading={devicesLoading}
         discoveryError={discoveryError}
-      />
-      <div className="grid grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
-        <div className="grid gap-2">
-          <Label
-            htmlFor="face-max-retries"
-            className="text-sm font-medium text-muted-foreground"
-          >
-            Max Retries
-          </Label>
-          <Controller
-            control={control}
-            name="methods.face.retries"
-            render={({ field, fieldState }) => (
-              <>
-                <Input
-                  id="face-max-retries"
-                  type="number"
-                  min="1"
-                  value={Number.isNaN(field.value) ? "" : field.value}
-                  onChange={(e) =>
-                    field.onChange(parseNumberInput(e.target.value))
+      >
+        {!paired && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label
+                htmlFor="camera-device"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Color camera
+              </Label>
+              <Select
+                value={cameraValue}
+                onValueChange={(value) => {
+                  if (value === disabledOption) {
+                    setValue("methods.face.camera", null, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                    return;
                   }
-                  aria-invalid={fieldState.invalid}
-                  className="h-10"
-                />
-                {fieldState.error && (
-                  <p className="text-xs text-destructive">
-                    {fieldState.error.message}
-                  </p>
-                )}
-              </>
-            )}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label
-            htmlFor="face-retry-delay"
-            className="text-sm font-medium text-muted-foreground"
-          >
-            Retry Delay (ms)
-          </Label>
-          <Controller
-            control={control}
-            name="methods.face.retry_delay"
-            render={({ field, fieldState }) => (
-              <>
-                <Input
-                  id="face-retry-delay"
-                  type="number"
-                  min="0"
-                  max="5000"
-                  value={Number.isNaN(field.value) ? "" : field.value}
-                  onChange={(e) =>
-                    field.onChange(parseNumberInput(e.target.value))
-                  }
-                  aria-invalid={fieldState.invalid}
-                  className="h-10"
-                />
-                {fieldState.error && (
-                  <p className="text-xs text-destructive">
-                    {fieldState.error.message}
-                  </p>
-                )}
-              </>
-            )}
-          />
-        </div>
-      </div>
-
-      {!paired && (
-        <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-          <div className="grid gap-2">
-            <Label
-              htmlFor="camera-device"
-              className="text-sm font-medium text-muted-foreground"
-            >
-              Camera Device
-            </Label>
-            <Select
-              value={cameraValue}
-              onValueChange={(value) => {
-                if (value === disabledOption) {
-                  setValue("methods.face.camera", null, {
+                  setValue("methods.face.camera", value, {
                     shouldDirty: true,
                     shouldValidate: true,
                   });
-                  return;
-                }
-                setValue("methods.face.camera", value, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                });
-              }}
-            >
-              <SelectTrigger id="camera-device" className="h-10 w-full">
-                <SelectValue placeholder="Auto-select (first device)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={disabledOption}>
-                  Auto-select (first device)
-                </SelectItem>
-                {cameraValue === unavailableCameraDeviceOption && (
-                  <SelectItem value={unavailableCameraDeviceOption} disabled>
-                    Selected camera unavailable
+                }}
+              >
+                <SelectTrigger id="camera-device" className="h-10 w-full">
+                  <SelectValue placeholder="Automatic color camera" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={disabledOption}>
+                    Automatic color camera
                   </SelectItem>
-                )}
-                {videoDevices.length > 0 ? (
-                  videoDevices.map((device) => (
-                    <SelectItem key={device.path} value={device.path}>
-                      {device.display_name}
+                  {cameraValue === unavailableCameraDeviceOption && (
+                    <SelectItem value={unavailableCameraDeviceOption} disabled>
+                      Selected camera unavailable
                     </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="__no_devices__" disabled>
-                    No video devices found
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+                  )}
+                  {videoDevices.length > 0 ? (
+                    videoDevices.map((device) => (
+                      <SelectItem
+                        key={device.stable_id}
+                        value={device.stable_id}
+                      >
+                        {device.display_name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="__no_devices__" disabled>
+                      No video devices found
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label
+                htmlFor="ir-device"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                IR camera
+              </Label>
+              <Select
+                value={irCameraValue}
+                onValueChange={(value) => {
+                  setValue(
+                    "methods.face.anti_spoofing.ir_camera",
+                    value === disabledOption ? null : value,
+                    {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    },
+                  );
+                }}
+              >
+                <SelectTrigger id="ir-device" className="h-10 w-full">
+                  <SelectValue placeholder="Select an IR camera" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={disabledOption}>No IR camera</SelectItem>
+                  {irCameraValue === unavailableIrDeviceOption && (
+                    <SelectItem value={unavailableIrDeviceOption} disabled>
+                      Selected IR camera unavailable
+                    </SelectItem>
+                  )}
+                  {videoDevices.length > 0 ? (
+                    videoDevices.map((device) => (
+                      <SelectItem
+                        key={device.stable_id}
+                        value={device.stable_id}
+                      >
+                        {device.display_name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="__no_ir_devices__" disabled>
+                      No video devices found
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        )}
+      </CameraPairSetting>
+      <section className="grid gap-3" aria-labelledby="enrolled-faces-heading">
+        <div>
+          <h4 id="enrolled-faces-heading" className="font-medium text-sm">
+            Your face
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            Use the selected color camera to save photos for recognition.
+          </p>
         </div>
-      )}
-
-      <FaceCapture
-        camera={previewCamera}
-        available={!paired || Boolean(activePair)}
-      />
-
-      <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-        <h4 className="font-medium mb-3 text-sm">Detection</h4>
-        <div className="flex gap-6 items-end">
-          <div className="flex-1 min-w-0">
-            <ModelSelect
-              label="Model"
-              value={config.detection.model_id}
-              models={models.filter((m) => m.model_type === "detection")}
-              error={
-                config.enable || !!errors.methods?.face?.detection?.model_id
-              }
-              errorMessage={errors.methods?.face?.detection?.model_id?.message}
-              onChange={(modelId) =>
-                setValue("methods.face.detection.model_id", modelId, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            />
-          </div>
-          <div className="w-48 shrink-0">
-            <Threshold
-              label="Threshold"
-              value={config.detection.threshold}
-              onChange={(threshold) =>
-                setValue("methods.face.detection.threshold", threshold, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            />
-          </div>
-        </div>
-        <h4 className="font-medium my-3 text-sm">Recognition</h4>
-        <div className="flex gap-6 items-end">
-          <div className="flex-1 min-w-0">
-            <ModelSelect
-              label="Model"
-              value={config.recognition.model_id}
-              models={models.filter((m) => m.model_type === "recognition")}
-              error={
-                config.enable || !!errors.methods?.face?.recognition?.model_id
-              }
-              errorMessage={
-                errors.methods?.face?.recognition?.model_id?.message
-              }
-              onChange={(modelId) =>
-                setValue("methods.face.recognition.model_id", modelId, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            />
-          </div>
-          <div className="w-48 shrink-0">
-            <Threshold
-              label="Threshold"
-              value={config.recognition.threshold}
-              onChange={(threshold) =>
-                setValue("methods.face.recognition.threshold", threshold, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            />
-          </div>
-        </div>
-      </div>
-
+        <FaceCapture
+          camera={previewCamera}
+          available={!paired || Boolean(activePair)}
+        />
+      </section>
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50 space-y-3">
-        <h4 className="font-medium text-sm">Anti-Spoofing</h4>
+        <h4 className="font-medium text-sm">Liveness checks</h4>
+        <div className="rounded-md border bg-background p-3 space-y-1">
+          <p className="text-sm font-medium">Infrared check</p>
+          <p className="text-sm text-muted-foreground">
+            {paired
+              ? activePair
+                ? `Required. Uses the IR stream from ${activePair.name || "the selected pair"}.`
+                : "Required, but no complete camera pair is currently connected."
+              : config.anti_spoofing.ir_camera
+                ? selectedIrCamera
+                  ? "Enabled. Uses the IR camera selected above."
+                  : "Configured IR camera disconnected. Reconnect it or update the camera selection above."
+                : "Off. Select an IR camera above to enable it."}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Checks for a face in the IR image during login.
+          </p>
+        </div>
         <div className="grid gap-2">
           <Label
             htmlFor="anti-spoofing-method"
             className="text-xs text-muted-foreground"
           >
-            AI Model
+            AI check (optional)
           </Label>
           <Select
             value={aiModelValue}
@@ -370,10 +309,10 @@ export function FaceSetting() {
             }}
           >
             <SelectTrigger id="anti-spoofing-method" className="h-10 w-full">
-              <SelectValue placeholder="Select AI anti-spoofing method" />
+              <SelectValue placeholder="Choose an AI model or turn off" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={disabledOption}>Disable</SelectItem>
+              <SelectItem value={disabledOption}>Off</SelectItem>
               {aiModelValue === unavailableAiModelOption && (
                 <SelectItem value={unavailableAiModelOption} disabled>
                   Selected anti-spoofing model unavailable
@@ -399,6 +338,10 @@ export function FaceSetting() {
               )}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Analyzes the color image for signs of a photo or screen. This is
+            independent of the IR check.
+          </p>
           {errors.methods?.face?.anti_spoofing?.model?.model_id && (
             <p className="text-xs text-destructive">
               {errors.methods.face.anti_spoofing.model.model_id.message}
@@ -424,54 +367,165 @@ export function FaceSetting() {
             />
           </div>
         )}
-
-        {!paired && (
-          <div className="grid gap-2">
-            <Label
-              htmlFor="ir-device"
-              className="text-xs text-muted-foreground"
-            >
-              IR Camera
-            </Label>
-            <Select
-              value={irCameraValue}
-              onValueChange={(value) => {
-                setValue(
-                  "methods.face.anti_spoofing.ir_camera",
-                  value === disabledOption ? null : value,
-                  {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  },
-                );
-              }}
-            >
-              <SelectTrigger id="ir-device" className="h-10 w-full">
-                <SelectValue placeholder="Select IR Camera Device" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={disabledOption}>Disable</SelectItem>
-                {irCameraValue === unavailableIrDeviceOption && (
-                  <SelectItem value={unavailableIrDeviceOption} disabled>
-                    Selected IR camera unavailable
-                  </SelectItem>
-                )}
-                {videoDevices.length > 0 ? (
-                  videoDevices.map((device) => (
-                    <SelectItem key={device.path} value={device.path}>
-                      {device.display_name}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="__no_ir_devices__" disabled>
-                    No video devices found
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
+
+      <details
+        className="rounded-lg border border-border/50 bg-muted/50 p-4"
+        open={Boolean(
+          errors.methods?.face?.detection ||
+            errors.methods?.face?.recognition ||
+            errors.methods?.face?.retries ||
+            errors.methods?.face?.retry_delay,
+        )}
+      >
+        <summary className="cursor-pointer font-medium text-sm">
+          Advanced settings
+        </summary>
+        <div className="grid gap-4 mt-4">
+          <p className="text-sm text-muted-foreground">
+            Recognition models, matching thresholds and retry timing.
+          </p>
+          <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
+            <h4 className="font-medium mb-3 text-sm">Detection</h4>
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-end">
+              <div className="w-full flex-1 min-w-0">
+                <ModelSelect
+                  label="Model"
+                  value={config.detection.model_id}
+                  models={models.filter((m) => m.model_type === "detection")}
+                  error={
+                    config.enable || !!errors.methods?.face?.detection?.model_id
+                  }
+                  errorMessage={
+                    errors.methods?.face?.detection?.model_id?.message
+                  }
+                  onChange={(modelId) =>
+                    setValue("methods.face.detection.model_id", modelId, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <Threshold
+                  label="Threshold"
+                  value={config.detection.threshold}
+                  onChange={(threshold) =>
+                    setValue("methods.face.detection.threshold", threshold, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <h4 className="font-medium my-3 text-sm">Recognition</h4>
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-end">
+              <div className="w-full flex-1 min-w-0">
+                <ModelSelect
+                  label="Model"
+                  value={config.recognition.model_id}
+                  models={models.filter((m) => m.model_type === "recognition")}
+                  error={
+                    config.enable ||
+                    !!errors.methods?.face?.recognition?.model_id
+                  }
+                  errorMessage={
+                    errors.methods?.face?.recognition?.model_id?.message
+                  }
+                  onChange={(modelId) =>
+                    setValue("methods.face.recognition.model_id", modelId, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <Threshold
+                  label="Threshold"
+                  value={config.recognition.threshold}
+                  onChange={(threshold) =>
+                    setValue("methods.face.recognition.threshold", threshold, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
+            <div className="grid gap-2">
+              <Label
+                htmlFor="face-max-retries"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Max Retries
+              </Label>
+              <Controller
+                control={control}
+                name="methods.face.retries"
+                render={({ field, fieldState }) => (
+                  <>
+                    <Input
+                      id="face-max-retries"
+                      type="number"
+                      min="1"
+                      value={Number.isNaN(field.value) ? "" : field.value}
+                      onChange={(e) =>
+                        field.onChange(parseNumberInput(e.target.value))
+                      }
+                      aria-invalid={fieldState.invalid}
+                      className="h-10"
+                    />
+                    {fieldState.error && (
+                      <p className="text-xs text-destructive">
+                        {fieldState.error.message}
+                      </p>
+                    )}
+                  </>
+                )}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label
+                htmlFor="face-retry-delay"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Retry Delay (ms)
+              </Label>
+              <Controller
+                control={control}
+                name="methods.face.retry_delay"
+                render={({ field, fieldState }) => (
+                  <>
+                    <Input
+                      id="face-retry-delay"
+                      type="number"
+                      min="0"
+                      max="5000"
+                      value={Number.isNaN(field.value) ? "" : field.value}
+                      onChange={(e) =>
+                        field.onChange(parseNumberInput(e.target.value))
+                      }
+                      aria-invalid={fieldState.invalid}
+                      className="h-10"
+                    />
+                    {fieldState.error && (
+                      <p className="text-xs text-destructive">
+                        {fieldState.error.message}
+                      </p>
+                    )}
+                  </>
+                )}
+              />
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
