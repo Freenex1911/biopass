@@ -24,13 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { modelTypeLabels } from "@/lib/model-types";
 import type { Model, ModelType } from "@/types/config";
 
-const MODEL_TYPE_OPTIONS: { value: ModelType; label: string }[] = [
-  { value: "detection", label: "Detection" },
-  { value: "recognition", label: "Recognition" },
-  { value: "anti_spoofing", label: "Anti-Spoofing" },
-];
+const MODEL_TYPE_OPTIONS = Object.entries(modelTypeLabels).map(
+  ([value, label]) => ({ value: value as ModelType, label }),
+);
 
 interface AddModelDialogProps {
   onAdded: (model: Model) => void;

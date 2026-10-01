@@ -96,58 +96,6 @@ export function FaceSetting({ active = true }: { active?: boolean }) {
           available={active && Boolean(activePair)}
         />
       </section>
-      <section
-        aria-labelledby="photo-protection-heading"
-        className="rounded-lg border border-border/50 p-4 grid gap-4"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid gap-1">
-            <Label
-              id="photo-protection-heading"
-              htmlFor="ai-photo-protection"
-              className="font-medium"
-            >
-              Photo & screen protection
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              An optional AI check looks for signs of a printed photo or screen
-              in the color image.
-            </p>
-          </div>
-          <Switch
-            id="ai-photo-protection"
-            checked={config.anti_spoofing.enable}
-            onCheckedChange={(enable) =>
-              setValue("methods.face.anti_spoofing.enable", enable, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          />
-        </div>
-        {config.anti_spoofing.enable && (
-          <ModelSelect
-            label="Protection model"
-            value={config.anti_spoofing.model.model_id}
-            models={antiSpoofModels}
-            error={true}
-            errorMessage={
-              errors.methods?.face?.anti_spoofing?.model?.model_id?.message
-            }
-            onChange={(model_id) =>
-              setValue("methods.face.anti_spoofing.model.model_id", model_id, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          />
-        )}
-        <p className="text-xs text-muted-foreground">
-          {config.anti_spoofing.enable
-            ? "Enabled for every configured camera."
-            : "Off. Any IR verification assigned to a camera remains active."}
-        </p>
-      </section>
 
       <SettingsDisclosure
         className="rounded-lg border border-border/50 bg-muted/50 p-4"
@@ -155,16 +103,17 @@ export function FaceSetting({ active = true }: { active?: boolean }) {
         hasErrors={Boolean(
           errors.methods?.face?.detection ||
             errors.methods?.face?.recognition ||
+            errors.methods?.face?.anti_spoofing?.model ||
             errors.methods?.face?.retries ||
             errors.methods?.face?.retry_delay,
         )}
       >
         <div className="grid gap-4 mt-4">
           <p className="text-sm text-muted-foreground">
-            Face detection, recognition sensitivity and retry timing.
+            AI models, sensitivity and retry timing.
           </p>
           <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-            <h4 className="font-medium mb-3 text-sm">Detection</h4>
+            <h4 className="font-medium mb-3 text-sm">Face detection</h4>
             <div className="flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-end">
               <div className="w-full flex-1 min-w-0">
                 <ModelSelect
@@ -198,7 +147,7 @@ export function FaceSetting({ active = true }: { active?: boolean }) {
                 />
               </div>
             </div>
-            <h4 className="font-medium my-3 text-sm">Recognition</h4>
+            <h4 className="font-medium my-3 text-sm">Face recognition</h4>
             <div className="flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-end">
               <div className="w-full flex-1 min-w-0">
                 <ModelSelect
@@ -235,21 +184,81 @@ export function FaceSetting({ active = true }: { active?: boolean }) {
             </div>
           </div>
 
-          {config.anti_spoofing.enable && (
-            <div className="grid gap-2">
-              <Threshold
-                label="Photo & screen protection threshold"
-                value={config.anti_spoofing.model.threshold}
-                onChange={(threshold) =>
-                  setValue(
-                    "methods.face.anti_spoofing.model.threshold",
-                    threshold,
-                    { shouldDirty: true, shouldValidate: true },
-                  )
+          <section
+            aria-labelledby="photo-protection-heading"
+            className="rounded-lg border border-border/50 p-4 grid gap-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid gap-1">
+                <Label
+                  id="photo-protection-heading"
+                  htmlFor="ai-photo-protection"
+                  className="font-medium"
+                >
+                  Photo & screen protection
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  An optional AI check looks for signs of a printed photo or
+                  screen in the color image.
+                </p>
+              </div>
+              <Switch
+                id="ai-photo-protection"
+                checked={config.anti_spoofing.enable}
+                onCheckedChange={(enable) =>
+                  setValue("methods.face.anti_spoofing.enable", enable, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
                 }
               />
             </div>
-          )}
+            {config.anti_spoofing.enable && (
+              <div className="flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-end">
+                <div className="w-full flex-1 min-w-0">
+                  <ModelSelect
+                    label="Model"
+                    value={config.anti_spoofing.model.model_id}
+                    models={antiSpoofModels}
+                    error={true}
+                    errorMessage={
+                      errors.methods?.face?.anti_spoofing?.model?.model_id
+                        ?.message
+                    }
+                    onChange={(model_id) =>
+                      setValue(
+                        "methods.face.anti_spoofing.model.model_id",
+                        model_id,
+                        {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        },
+                      )
+                    }
+                  />
+                </div>
+                <div className="w-full sm:w-48 shrink-0">
+                  <Threshold
+                    label="Threshold"
+                    value={config.anti_spoofing.model.threshold}
+                    onChange={(threshold) =>
+                      setValue(
+                        "methods.face.anti_spoofing.model.threshold",
+                        threshold,
+                        { shouldDirty: true, shouldValidate: true },
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {config.anti_spoofing.enable
+                ? "Enabled for every configured camera."
+                : "Off. Any IR verification assigned to a camera remains active."}
+            </p>
+          </section>
+
           <div className="grid sm:grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
             <div className="grid gap-2">
               <Label

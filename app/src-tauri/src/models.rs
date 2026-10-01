@@ -9,7 +9,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 
-use crate::config::load_config;
+use crate::config::{load_config, BiopassConfig};
 use crate::db::{self, Model};
 use crate::paths::get_data_dir;
 
@@ -22,6 +22,76 @@ const MAX_NAME_LEN: usize = 200;
 pub fn list_models(app: AppHandle, model_type: Option<String>) -> Result<Vec<Model>, String> {
     let conn = db::open(&app)?;
     db::list_models(&conn, model_type.as_deref())
+}
+
+#[derive(Serialize)]
+pub struct ModelManagement {
+    model: Model,
+    selected_for: Vec<String>,
+    delete_block_reason: Option<String>,
+}
+
+fn selected_for(model: &Model, config: &BiopassConfig) -> Vec<String> {
+    let face = &config.methods.face;
+    let mut roles = Vec::new();
+    for (id, label, enabled) in [
+        (&face.detection.model_id, "Face detection", face.enable),
+        (&face.recognition.model_id, "Face recognition", face.enable),
+        (
+            &face.anti_spoofing.model.model_id,
+            "Photo & screen protection",
+            face.enable && face.anti_spoofing.enable,
+        ),
+    ] {
+        if id == &model.id {
+            roles.push(format!("{}{}", label, if enabled { "" } else { " (off)" }));
+        }
+    }
+    roles
+}
+
+fn delete_block_reason(model: &Model, config: &BiopassConfig) -> Option<String> {
+    if model.source == "builtin" {
+        Some("Included with BioPass. Bundled models cannot be deleted.".into())
+    } else if !selected_for(model, config).is_empty() {
+        Some("Selected in sign-in settings. Choose another model and save before deleting, even if the check is off.".into())
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+pub fn list_model_management(app: AppHandle) -> Result<Vec<ModelManagement>, String> {
+    let conn = db::open(&app)?;
+    let config = load_config(app)?;
+    Ok(db::list_models(&conn, None)?
+        .into_iter()
+        .map(|model| ModelManagement {
+            selected_for: selected_for(&model, &config),
+            delete_block_reason: delete_block_reason(&model, &config),
+            model,
+        })
+        .collect())
+}
+
+fn delete_registered_model(
+    conn: &Connection,
+    model: &Model,
+    config: &BiopassConfig,
+    dir: &Path,
+) -> Result<(), String> {
+    if let Some(reason) = delete_block_reason(model, config) {
+        return Err(reason);
+    }
+    let path = PathBuf::from(&model.path);
+    if path.starts_with(dir) {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("Failed to delete model file: {}", e)),
+        }
+    }
+    db::delete_model(conn, &model.id)
 }
 
 #[derive(Clone, Serialize)]
@@ -288,29 +358,8 @@ pub fn delete_model(app: AppHandle, id: String) -> Result<(), String> {
     let conn = db::open(&app)?;
     let model = db::get_model(&conn, &id)?.ok_or_else(|| format!("Model '{}' not found", id))?;
 
-    if model.source == "builtin" {
-        return Err("Default models cannot be deleted".to_string());
-    }
-
     let config = load_config(app.clone())?;
-    let in_use = config.methods.face.detection.model_id == id
-        || config.methods.face.recognition.model_id == id
-        || config.methods.face.anti_spoofing.model.model_id == id;
-    if in_use {
-        return Err("Model is currently in use and cannot be deleted".to_string());
-    }
-
-    let dir = models_dir(&app)?;
-    let path = PathBuf::from(&model.path);
-    if path.starts_with(&dir) {
-        match std::fs::remove_file(&path) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("Failed to delete model file: {}", e)),
-        }
-    }
-
-    db::delete_model(&conn, &id)
+    delete_registered_model(&conn, &model, &config, &models_dir(&app)?)
 }
 
 #[tauri::command]
@@ -319,4 +368,92 @@ pub fn rename_model(app: AppHandle, id: String, name: String) -> Result<Model, S
     let conn = db::open(&app)?;
     db::update_model_name(&conn, &id, &name)?;
     db::get_model(&conn, &id)?.ok_or_else(|| format!("Model '{}' not found", id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture() -> (Connection, tempfile::TempDir, Model, BiopassConfig) {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("../migrations/001_initial.sql"))
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("custom.onnx");
+        std::fs::write(&path, b"test model").unwrap();
+        db::upsert_model(
+            &conn,
+            "custom",
+            "Custom",
+            "anti_spoofing",
+            path.to_str().unwrap(),
+            None,
+            None,
+            "user",
+        )
+        .unwrap();
+        let model = db::get_model(&conn, "custom").unwrap().unwrap();
+        let config = serde_yaml::from_str(
+            r#"
+schema_version: 2
+appearance: system
+strategy: {debug: false, execution_mode: parallel, order: [face], ignore_services: []}
+methods:
+  face:
+    enable: true
+    retries: 5
+    retry_delay: 200
+    camera: null
+    detection: {model_id: detector, threshold: 0.5}
+    recognition: {model_id: recognizer, threshold: 0.5}
+    anti_spoofing:
+      enable: false
+      model: {model_id: protection, threshold: 0.8}
+      ir_camera: null
+      ir_warmup_delay_ms: 400
+      ir_presence_timeout_ms: 1500
+  fingerprint: {enable: false, retries: 1, timeout: 5000}
+"#,
+        )
+        .unwrap();
+        (conn, dir, model, config)
+    }
+    #[test]
+    fn delete_imported_model_removes_file_and_registry() {
+        let (conn, dir, model, config) = fixture();
+        delete_registered_model(&conn, &model, &config, dir.path()).unwrap();
+        assert!(!Path::new(&model.path).exists());
+        assert!(db::get_model(&conn, &model.id).unwrap().is_none());
+    }
+    #[test]
+    fn disabled_selected_model_is_protected_even_if_file_missing() {
+        let (conn, dir, model, mut config) = fixture();
+        config.methods.face.anti_spoofing.model.model_id = model.id.clone();
+        assert_eq!(
+            selected_for(&model, &config),
+            vec!["Photo & screen protection (off)"]
+        );
+        assert!(delete_registered_model(&conn, &model, &config, dir.path()).is_err());
+        assert!(Path::new(&model.path).exists());
+        std::fs::remove_file(&model.path).unwrap();
+        assert!(delete_registered_model(&conn, &model, &config, dir.path()).is_err());
+        assert!(db::get_model(&conn, &model.id).unwrap().is_some());
+    }
+    #[test]
+    fn builtin_models_are_protected_and_external_files_are_preserved() {
+        let (conn, dir, mut model, config) = fixture();
+        model.source = "builtin".into();
+        assert!(delete_registered_model(&conn, &model, &config, dir.path()).is_err());
+        model.source = "user".into();
+        let managed = tempfile::tempdir().unwrap();
+        delete_registered_model(&conn, &model, &config, managed.path()).unwrap();
+        assert!(Path::new(&model.path).exists());
+        assert!(db::get_model(&conn, &model.id).unwrap().is_none());
+    }
+    #[test]
+    fn missing_unselected_model_can_be_removed_from_registry() {
+        let (conn, dir, model, config) = fixture();
+        std::fs::remove_file(&model.path).unwrap();
+        delete_registered_model(&conn, &model, &config, dir.path()).unwrap();
+        assert!(db::get_model(&conn, &model.id).unwrap().is_none());
+    }
 }
