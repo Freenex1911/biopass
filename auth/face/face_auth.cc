@@ -14,7 +14,14 @@
 
 namespace biopass {
 
-bool FaceAuth::isAvailable() const { return checkCameraAvailability(face_config_.camera); }
+bool FaceAuth::isAvailable() const {
+  // Keep the availability probe's stream for the authentication session.
+  // Starting and immediately stopping a USB camera is expensive.
+  if (!camera_session_ || !camera_session_->isOpen()) {
+    camera_session_ = openCameraSession(face_config_.camera);
+  }
+  return camera_session_ && camera_session_->isOpen();
+}
 
 void FaceAuth::ensureIrSession() {
   if (face_config_.anti_spoofing.ir_camera.has_value() &&
@@ -27,6 +34,13 @@ void FaceAuth::ensureIrSession() {
 }
 
 bool FaceAuth::ensureModelsLoaded() {
+  if (models_future_.valid()) {
+    return models_future_.get();
+  }
+  return loadModels();
+}
+
+bool FaceAuth::loadModels() {
   if (detector_ && recognizer_) {
     return true;
   }

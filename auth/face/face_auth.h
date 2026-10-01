@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <future>
 
 #include "auth_config.h"
 #include "auth_method.h"
@@ -21,7 +22,10 @@ class FaceAuth : public IAuthMethod {
   // instance (one authentication session), reused for every model_id lookup
   // instead of opening/closing the DB per lookup.
   FaceAuth(const FaceMethodConfig& config, const std::string& username)
-      : face_config_(config), model_registry_(username) {}
+      : face_config_(config), model_registry_(username) {
+    // Load models while the availability probe starts the RGB camera.
+    models_future_ = std::async(std::launch::async, [this] { return loadModels(); });
+  }
   ~FaceAuth() override = default;
 
   std::string name() const override { return "Face"; }
@@ -38,13 +42,16 @@ class FaceAuth : public IAuthMethod {
   // Loads the detection + recognition models once; returns false if either
   // model file is missing or fails to load.
   bool ensureModelsLoaded();
+  bool loadModels();
 
   FaceMethodConfig face_config_;
   ModelRegistry model_registry_;
-  std::unique_ptr<ICameraCaptureSession> camera_session_;
+  mutable std::unique_ptr<ICameraCaptureSession> camera_session_;
   std::unique_ptr<ICameraCaptureSession> ir_camera_session_;
   std::unique_ptr<FaceDetection> detector_;
   std::unique_ptr<FaceRecognition> recognizer_;
+  // Destroyed first: the async worker must finish before its dependencies.
+  std::future<bool> models_future_;
 };
 
 }  // namespace biopass
