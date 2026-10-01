@@ -139,7 +139,7 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
         <DialogHeader>
           <DialogTitle>Add model</DialogTitle>
           <DialogDescription>
-            Add an ONNX model by pasting a download URL or picking a local file.
+            Add an ONNX model from a download URL or a local file.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,7 +156,7 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label>Type</Label>
+            <Label>Purpose</Label>
             <Select
               value={modelType}
               onValueChange={(v) => setModelType(v as ModelType)}
@@ -181,14 +181,14 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
           >
             <TabsList className="w-full">
               <TabsTrigger value="url" className="flex-1" disabled={submitting}>
-                From URL
+                Download
               </TabsTrigger>
               <TabsTrigger
                 value="file"
                 className="flex-1"
                 disabled={submitting}
               >
-                From file
+                Local file
               </TabsTrigger>
             </TabsList>
             <TabsContent value="url" className="flex flex-col gap-2">

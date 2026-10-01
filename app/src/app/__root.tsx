@@ -87,7 +87,7 @@ function App() {
                   }`}
                 >
                   <Settings className="w-4 h-4" />
-                  <span className="text-sm font-medium">Sign-in</span>
+                  <span className="text-sm font-medium">Sign-in settings</span>
                 </Link>
                 <Link
                   to="/models"
@@ -98,7 +98,7 @@ function App() {
                   }`}
                 >
                   <Cpu className="w-4 h-4" />
-                  <span className="text-sm font-medium">AI Models</span>
+                  <span className="text-sm font-medium">AI models</span>
                 </Link>
               </div>
             </div>
