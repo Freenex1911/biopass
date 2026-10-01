@@ -31,11 +31,10 @@ export function FaceCapture({
     loadFaceImages();
   }, [loadFaceImages]);
 
-  // Subscribe to native preview frames whenever the session is active.
+  // Subscribe before starting the helper so an immediate failure is not lost.
   useEffect(() => {
-    if (!capturing) return;
-
     let unlisten: UnlistenFn | undefined;
+    let unlistenError: UnlistenFn | undefined;
     let cancelled = false;
 
     listen<string>("face-preview-frame", (event) => {
@@ -50,11 +49,21 @@ export function FaceCapture({
       }
     });
 
+    listen<string>("face-preview-error", (event) => {
+      setCapturing(false);
+      toast.error(event.payload);
+      void cmd.face.stopPreview().catch(() => {});
+    }).then((u) => {
+      if (cancelled) u();
+      else unlistenError = u;
+    });
+
     return () => {
       cancelled = true;
       unlisten?.();
+      unlistenError?.();
     };
-  }, [capturing]);
+  }, []);
 
   // Make sure the helper process is torn down on unmount.
   useEffect(() => {

@@ -6,6 +6,7 @@
 #include "auth_config.h"
 #include "auth_method.h"
 #include "camera_capture.h"
+#include "face_as.h"
 #include "face_detection.h"
 #include "face_recognition.h"
 #include "model_registry.h"
@@ -22,7 +23,7 @@ class FaceAuth : public IAuthMethod {
   // instance (one authentication session), reused for every model_id lookup
   // instead of opening/closing the DB per lookup.
   FaceAuth(const FaceMethodConfig& config, const std::string& username)
-      : face_config_(config), model_registry_(username) {
+      : face_config_(config), model_registry_(username), username_(username) {
     // Load models while the availability probe starts the RGB camera.
     models_future_ = std::async(std::launch::async, [this] { return loadModels(); });
   }
@@ -39,6 +40,7 @@ class FaceAuth : public IAuthMethod {
 
  private:
   void ensureIrSession();
+  void prepareEnrolledFaces();
   // Loads the detection + recognition models once; returns false if either
   // model file is missing or fails to load.
   bool ensureModelsLoaded();
@@ -51,6 +53,15 @@ class FaceAuth : public IAuthMethod {
   std::unique_ptr<ICameraCaptureSession> ir_camera_session_;
   std::unique_ptr<FaceDetection> detector_;
   std::unique_ptr<FaceRecognition> recognizer_;
+  std::unique_ptr<FaceAntiSpoofing> protection_;
+  std::string username_;
+  struct EnrolledFace {
+    std::string path;
+    std::vector<float> embedding;
+    bool prepared = false;
+  };
+  std::vector<EnrolledFace> enrolled_faces_;
+  bool enrolled_faces_prepared_ = false;
   // Destroyed first: the async worker must finish before its dependencies.
   std::future<bool> models_future_;
 };

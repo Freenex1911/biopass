@@ -11,6 +11,7 @@ namespace biopass {
 
 class ICameraCaptureSession;
 class FaceDetection;
+class FaceAntiSpoofing;
 
 // shared_detector: the caller's already-loaded face detector, reused for the
 // IR presence check instead of loading a second copy of the model.
@@ -20,5 +21,11 @@ bool checkAntiSpoof(const FaceMethodConfig& face_config, const std::string& user
                     const ImageRGB& face, const AuthConfig& config,
                     const ModelRegistry& model_registry, FaceDetection* shared_detector,
                     ICameraCaptureSession* ir_camera_session = nullptr);
+
+bool checkAntiSpoof(const FaceMethodConfig& face_config, const std::string& username,
+                    const ImageRGB& face, const AuthConfig& config,
+                    const ModelRegistry& model_registry, FaceDetection* shared_detector,
+                    ICameraCaptureSession* ir_camera_session, FaceAntiSpoofing* shared_protection,
+                    std::atomic<bool>* cancel_signal);
 
 }  // namespace biopass

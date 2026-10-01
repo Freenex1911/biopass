@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 
 namespace biopass {
@@ -30,5 +31,11 @@ bool checkAntispoofByIRCamera(const std::string& ir_camera_path, FaceDetection* 
                               const std::string& username, bool debug,
                               ICameraCaptureSession* session = nullptr, int warmup_delay_ms = 300,
                               int presence_timeout_ms = 1500);
+
+// Session variant can stop between captures and during the stabilization wait.
+bool checkAntispoofByIRCamera(const std::string& ir_camera_path, FaceDetection* detector,
+                              const std::string& username, bool debug,
+                              ICameraCaptureSession* session, int warmup_delay_ms,
+                              int presence_timeout_ms, std::atomic<bool>* cancel_signal);
 
 }  // namespace biopass

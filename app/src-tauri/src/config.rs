@@ -24,6 +24,8 @@ pub struct BiopassConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct StrategyConfig {
     pub debug: bool,
+    #[serde(default)]
+    pub show_auth_status: bool,
     pub execution_mode: String,
     pub order: Vec<String>,
     pub ignore_services: Vec<String>,
@@ -158,6 +160,7 @@ fn get_default_config() -> BiopassConfig {
         schema_version: CURRENT_SCHEMA_VERSION,
         strategy: StrategyConfig {
             debug: false,
+            show_auth_status: false,
             execution_mode: "parallel".to_string(),
             order: vec!["face".to_string(), "fingerprint".to_string()],
             ignore_services: default_ignored_services(),
@@ -331,6 +334,43 @@ fn write_config(app: &AppHandle, yaml_content: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_configuration_contract() {
+        for content in [
+            include_str!("../../../tests/config-contract/legacy.json"),
+            include_str!("../../../tests/config-contract/color-only.json"),
+            include_str!("../../../tests/config-contract/fixed-ir.json"),
+        ] {
+            let mut expected: serde_json::Value = serde_json::from_str(content).unwrap();
+            if expected["strategy"].get("show_auth_status").is_none() {
+                expected["strategy"]["show_auth_status"] = false.into();
+            }
+            if expected["methods"]["face"]
+                .get("camera_selection")
+                .is_none()
+            {
+                expected["methods"]["face"]["camera_selection"] =
+                    serde_json::json!({"mode":"legacy","pairs":[],"fixed_pair":null});
+            }
+            // The inference backends intentionally use float32 thresholds.
+            for pointer in [
+                "/methods/face/detection/threshold",
+                "/methods/face/recognition/threshold",
+                "/methods/face/anti_spoofing/model/threshold",
+            ] {
+                let value = expected.pointer(pointer).unwrap().as_f64().unwrap() as f32;
+                *expected.pointer_mut(pointer).unwrap() = serde_json::json!(value);
+            }
+            let actual = parse_config(content);
+            assert_eq!(serde_json::to_value(&actual).unwrap(), expected);
+            validate_camera_selection(&actual.methods.face.camera_selection).unwrap();
+            assert_eq!(
+                parse_config(&serde_yaml::to_string(&actual).unwrap()),
+                actual
+            );
+        }
+    }
 
     #[test]
     fn changing_appearance_preserves_other_and_unknown_settings() {

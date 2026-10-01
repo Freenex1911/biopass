@@ -6,6 +6,7 @@ export function configFixture(): BiopassConfig {
     appearance: "system",
     strategy: {
       debug: false,
+      show_auth_status: false,
       execution_mode: "parallel",
       order: ["face", "fingerprint"],
       ignore_services: [],

@@ -289,7 +289,7 @@ int captureAndCropFace(const std::string& cameraPath, const std::string& outputP
   return 0;
 }
 
-int authenticate(const std::string& username, const std::string& service) {
+int authenticate(const std::string& username, const std::string& service, int status_fd) {
   const char* pUsername = username.c_str();
 
   if (!biopass::configExists(pUsername)) {
@@ -314,6 +314,13 @@ int authenticate(const std::string& username, const std::string& service) {
                               !config.methods.face.anti_spoofing.ir_camera->empty());
 
   biopass::AuthManager manager;
+  if (status_fd >= 0 && service == "gdm-password" && config.strategy.show_auth_status) {
+    manager.setStatusCallback([status_fd](const std::string& method) {
+      const std::string message = method == "Face" ? "FACE\n" : "FINGERPRINT\n";
+      (void)write(status_fd, message.data(), message.size());
+    });
+  }
+
   manager.setMode(config.strategy.execution_mode == "sequential"
                       ? biopass::ExecutionMode::Sequential
                       : biopass::ExecutionMode::Parallel);
@@ -379,8 +386,10 @@ int main(int argc, char** argv) {
 
   std::string username;
   std::string pamService;
+  int statusFd = -1;
   auto auth_cmd = app.add_subcommand("auth", "Authenticate a user with Biopass");
   auth_cmd->add_option("--username,-u", username, "Username for authentication")->required();
+  auth_cmd->add_option("--status-fd", statusFd, "Private PAM status channel");
   auth_cmd->add_option("--service,-s", pamService, "PAM service name");
 
   try {
@@ -410,7 +419,7 @@ int main(int argc, char** argv) {
       spdlog::info("{}", app.help());
       return 2;  // PAM_IGNORE logic / error
     }
-    return authenticate(username, pamService);
+    return authenticate(username, pamService, statusFd);
   }
 
   spdlog::error("No valid subcommand provided");

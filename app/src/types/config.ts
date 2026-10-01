@@ -7,6 +7,7 @@ export interface BiopassConfig {
 
 export interface StrategyConfig {
   debug: boolean;
+  show_auth_status: boolean;
   execution_mode: "sequential" | "parallel";
   order: string[];
   ignore_services: string[];

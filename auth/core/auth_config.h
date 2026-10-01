@@ -30,6 +30,7 @@ inline constexpr int kCurrentSchemaVersion = 2;
 
 struct StrategyConfig {
   bool debug = false;
+  bool show_auth_status = false;
   std::string execution_mode = "parallel";
   std::vector<std::string> order = {"face", "fingerprint"};
   std::vector<std::string> ignore_services = {"polkit-1", "pkexec"};
@@ -117,6 +118,7 @@ struct BiopassConfig {
 };
 std::string getConfigPath(const std::string& username);
 BiopassConfig readConfig(const std::string& username);
+BiopassConfig readConfigFile(const std::string& path);
 bool configExists(const std::string& username);
 
 std::vector<std::string> listFaces(const std::string& username);

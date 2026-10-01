@@ -15,6 +15,17 @@ bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* det
                               const std::string& username, bool debug,
                               ICameraCaptureSession* session, int warmup_delay_ms,
                               int presence_timeout_ms) {
+  return checkAntispoofByIRCamera(device_path, detector, username, debug, session, warmup_delay_ms,
+                                  presence_timeout_ms, nullptr);
+}
+
+bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* detector,
+                              const std::string& username, bool debug,
+                              ICameraCaptureSession* session, int warmup_delay_ms,
+                              int presence_timeout_ms, std::atomic<bool>* cancel_signal) {
+  const auto cancelled = [cancel_signal] { return cancel_signal && cancel_signal->load(); };
+  if (cancelled())
+    return false;
   spdlog::debug(
       "FaceAuth: IR presence check | device='{}' warmup_delay_ms={} presence_timeout_ms={}",
       device_path, warmup_delay_ms, presence_timeout_ms);
@@ -28,7 +39,13 @@ bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* det
   if (warmup_delay_ms > 0) {
     spdlog::debug("FaceAuth: IR presence check — sleeping {}ms for camera stabilisation",
                   warmup_delay_ms);
-    std::this_thread::sleep_for(std::chrono::milliseconds(warmup_delay_ms));
+    const auto warmup_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(warmup_delay_ms);
+    while (std::chrono::steady_clock::now() < warmup_deadline) {
+      if (cancelled())
+        return false;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   }
 
   const auto deadline = std::chrono::steady_clock::now() +
@@ -37,6 +54,8 @@ bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* det
   ImageRGB last_frame;
   int attempt = 0;
   do {
+    if (cancelled())
+      return false;
     ++attempt;
 
     ImageRGB frame;
@@ -56,6 +75,8 @@ bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* det
       frame = captureImageByIRCamera(device_path);
     }
 
+    if (cancelled())
+      return false;
     if (frame.empty()) {
       spdlog::debug("FaceAuth: IR presence check — attempt {} frame capture failed from '{}'",
                     attempt, device_path);
@@ -93,7 +114,7 @@ bool checkAntispoofByIRCamera(const std::string& device_path, FaceDetection* det
           "FaceAuth: IR presence check PASSED — attempt {}, {} face(s) detected, best conf={:.4f} "
           "(NOTE: presence check only, not liveness)",
           attempt, detections.size(), detections[0].conf);
-      return true;
+      return !cancelled();
     } catch (const std::exception& e) {
       spdlog::error("FaceAuth: IR presence check — exception during detection: {}", e.what());
       return false;
