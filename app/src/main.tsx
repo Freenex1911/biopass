@@ -8,12 +8,7 @@ import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      enableColorScheme
-    >
+    <ThemeProvider>
       <RouterProvider router={router} />
       <Toaster position="bottom-right" richColors />
     </ThemeProvider>

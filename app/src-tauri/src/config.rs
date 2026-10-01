@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
 use crate::paths::{get_config_dir, get_config_path};
@@ -9,6 +10,8 @@ use crate::paths::{get_config_dir, get_config_path};
 /// forward/backward compatible. Mirrors CURRENT_SCHEMA_VERSION in
 /// auth/core/auth_config.h - keep both in sync.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
+static CONFIG_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct BiopassConfig {
@@ -232,19 +235,69 @@ pub fn load_config(app: AppHandle) -> Result<BiopassConfig, String> {
     Ok(parse_config(&content))
 }
 
+// Appearance is controlled by the global menu, not by the sign-in form. Keep
+// its latest saved value when an older form snapshot is submitted.
+fn preserve_appearance(config: &mut BiopassConfig, saved: &str) {
+    if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(saved) {
+        if let Some(appearance) = value.get("appearance").and_then(|v| v.as_str()) {
+            if matches!(appearance, "system" | "light" | "dark") {
+                config.appearance = appearance.to_string();
+            }
+        }
+    }
+}
+
+fn appearance_yaml(saved: &str, appearance: &str) -> Result<String, String> {
+    if !matches!(appearance, "system" | "light" | "dark") {
+        return Err("Invalid appearance preference".into());
+    }
+    let mut value: serde_yaml::Value =
+        serde_yaml::from_str(saved).map_err(|e| format!("Failed to read settings: {e}"))?;
+    let map = value
+        .as_mapping_mut()
+        .ok_or("Settings must be a YAML mapping")?;
+    map.insert(
+        serde_yaml::Value::String("appearance".into()),
+        serde_yaml::Value::String(appearance.into()),
+    );
+    serde_yaml::to_string(&value).map_err(|e| format!("Failed to serialize settings: {e}"))
+}
+
 #[tauri::command]
-pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> {
+pub fn save_appearance(app: AppHandle, appearance: String) -> Result<(), String> {
+    let _guard = CONFIG_WRITE_LOCK.lock().map_err(|e| e.to_string())?;
+    let path = get_config_path(&app)?;
+    let saved = if path.exists() {
+        fs::read_to_string(path).map_err(|e| format!("Failed to read settings: {e}"))?
+    } else {
+        serde_yaml::to_string(&get_default_config()).map_err(|e| e.to_string())?
+    };
+    write_config(&app, &appearance_yaml(&saved, &appearance)?)
+}
+
+#[tauri::command]
+pub fn save_config(app: AppHandle, mut config: BiopassConfig) -> Result<(), String> {
+    let _guard = CONFIG_WRITE_LOCK.lock().map_err(|e| e.to_string())?;
     validate_camera_selection(&config.methods.face.camera_selection)?;
-    let config_dir = get_config_dir(&app)?;
-    let config_path = get_config_path(&app)?;
+    let path = get_config_path(&app)?;
+    if path.exists() {
+        let saved =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read settings: {e}"))?;
+        preserve_appearance(&mut config, &saved);
+    }
+    let content =
+        serde_yaml::to_string(&config).map_err(|e| format!("Failed to serialize config: {e}"))?;
+    write_config(&app, &content)
+}
+
+fn write_config(app: &AppHandle, yaml_content: &str) -> Result<(), String> {
+    let config_dir = get_config_dir(app)?;
+    let config_path = get_config_path(app)?;
 
     if !config_dir.exists() {
         fs::create_dir_all(&config_dir)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
-
-    let yaml_content =
-        serde_yaml::to_string(&config).map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     // Write to a temp file in the same directory (so the rename below is an
     // atomic same-filesystem operation) then persist over the real path, so a
@@ -278,6 +331,27 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changing_appearance_preserves_other_and_unknown_settings() {
+        let saved =
+            "appearance: dark\nfuture_setting: {enabled: true}\nmethods: {face: {enable: true}}\n";
+        let updated = appearance_yaml(saved, "system").unwrap();
+        let mut before: serde_yaml::Value = serde_yaml::from_str(saved).unwrap();
+        let after: serde_yaml::Value = serde_yaml::from_str(&updated).unwrap();
+        before["appearance"] = serde_yaml::Value::String("system".into());
+        assert_eq!(before, after);
+        assert!(appearance_yaml(saved, "unexpected").is_err());
+        assert!(appearance_yaml("[invalid, root]", "system").is_err());
+    }
+
+    #[test]
+    fn saving_a_stale_sign_in_form_keeps_current_appearance() {
+        let mut config = get_default_config();
+        config.appearance = "light".into();
+        preserve_appearance(&mut config, "appearance: system\n");
+        assert_eq!(config.appearance, "system");
+    }
 
     #[test]
     fn color_only_setups_are_valid_but_color_stream_is_required() {

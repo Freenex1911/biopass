@@ -6,79 +6,44 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { getVersion } from "@tauri-apps/api/app";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Cpu, Laptop, Moon, Settings, Sun, User } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 import { cmd } from "@/commands";
+import { useAppearance } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { appearancePreference } from "@/lib/appearance";
 
 function App() {
   const [username, setUsername] = useState("");
   const [version, setVersion] = useState("");
-  const { setTheme, theme } = useTheme();
+  const {
+    appearance,
+    resolvedTheme,
+    systemTheme,
+    ready,
+    saving,
+    setAppearance,
+  } = useAppearance();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
 
   useEffect(() => {
-    // Listen for system theme changes from Tauri (more reliable on Linux)
-    const window = getCurrentWindow();
-
-    const sync = async () => {
-      if (theme === "system") {
-        const sysTheme = await window.theme();
-        if (sysTheme)
-          document.documentElement.classList.toggle(
-            "dark",
-            sysTheme === "dark",
-          );
-      }
-    };
-
-    sync();
-
-    const unlisten = window.onThemeChanged(({ payload: newTheme }) => {
-      if (theme === "system") {
-        document.documentElement.classList.toggle("dark", newTheme === "dark");
-      }
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [theme]);
-
-  const initialized = useRef(false);
-
-  useEffect(() => {
     const loadUsername = async () => {
       try {
-        const u = await cmd.system.getCurrentUsername();
-        setUsername(u);
+        setUsername(await cmd.system.getCurrentUsername());
       } catch (err) {
         console.error("Failed to get username:", err);
-      }
-    };
-
-    const loadInitialTheme = async () => {
-      if (initialized.current) return;
-      initialized.current = true;
-
-      try {
-        const config = await cmd.config.load();
-        if (config.appearance) {
-          setTheme(config.appearance);
-        }
-      } catch (err) {
-        console.error("Failed to load initial theme from config:", err);
       }
     };
 
@@ -91,32 +56,15 @@ function App() {
     };
 
     loadUsername();
-    loadInitialTheme();
     loadVersion();
-  }, [setTheme]);
-
-  // Update theme in config when it changes manually via toggle
-  useEffect(() => {
-    const updateConfigTheme = async () => {
-      try {
-        const config = await cmd.config.load();
-        if (config.appearance !== theme) {
-          config.appearance = theme ?? "dark";
-          await cmd.config.save(config);
-        }
-      } catch (err) {
-        console.debug("Theme sync to config skipped or failed:", err);
-      }
-    };
-    if (theme) updateConfigTheme();
-  }, [theme]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="sticky top-0 z-50 backdrop-blur-lg bg-background/80 border-b border-border">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3 sm:gap-8">
               <div className="flex items-center gap-3">
                 <img src={logo} className="h-8" alt="Biopass logo" />
                 <span className="font-bold text-lg hidden sm:inline-block">
@@ -139,7 +87,7 @@ function App() {
                   }`}
                 >
                   <Settings className="w-4 h-4" />
-                  <span className="text-sm font-medium">Configuration</span>
+                  <span className="text-sm font-medium">Sign-in</span>
                 </Link>
                 <Link
                   to="/models"
@@ -155,51 +103,70 @@ function App() {
               </div>
             </div>
 
-            {username && (
-              <div className="flex items-center gap-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="cursor-pointer"
-                    >
-                      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                      <span className="sr-only">Toggle theme</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => setTheme("light")}
-                      className="cursor-pointer"
-                    >
-                      <Sun className="mr-2 h-4 w-4" />
-                      <span>Light</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme("dark")}
-                      className="cursor-pointer"
-                    >
-                      <Moon className="mr-2 h-4 w-4" />
-                      <span>Dark</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme("system")}
-                      className="cursor-pointer"
-                    >
+            <div className="flex items-center gap-2 sm:gap-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!ready || saving}
+                    aria-label={`Appearance: ${appearance}`}
+                    className="gap-2"
+                  >
+                    {appearance === "system" ? (
+                      <Laptop className="h-4 w-4" />
+                    ) : resolvedTheme === "dark" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {appearance === "system"
+                        ? "System"
+                        : appearance === "dark"
+                          ? "Dark"
+                          : "Light"}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={appearance}
+                    onValueChange={(value) => {
+                      void setAppearance(appearancePreference(value)).catch(
+                        (error) =>
+                          toast.error(`Could not save appearance: ${error}`),
+                      );
+                    }}
+                  >
+                    <DropdownMenuRadioItem value="system">
                       <Laptop className="mr-2 h-4 w-4" />
-                      <span>System</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
+                      <span>
+                        Follow system{" "}
+                        <span className="text-muted-foreground">
+                          (currently {systemTheme})
+                        </span>
+                      </span>
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="light">
+                      <Sun className="mr-2 h-4 w-4" />
+                      Light
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark">
+                      <Moon className="mr-2 h-4 w-4" />
+                      Dark
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {username && (
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
                   <User className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{username}</span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </nav>
@@ -215,7 +182,7 @@ function RootLayout() {
   return (
     <>
       <App />
-      <TanStackRouterDevtools />
+      {import.meta.env.DEV && <TanStackRouterDevtools />}
     </>
   );
 }
