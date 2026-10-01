@@ -58,7 +58,13 @@ export function RenameModelDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" title="Rename model">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          title="Rename model"
+          aria-label={`Rename ${model.name}`}
+        >
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
@@ -66,8 +72,8 @@ export function RenameModelDialog({
         <DialogHeader>
           <DialogTitle>Rename model</DialogTitle>
           <DialogDescription>
-            Update the display name for this model. This does not affect any
-            configuration referencing it.
+            Change the name shown in BioPass. Your model selection stays the
+            same.
           </DialogDescription>
         </DialogHeader>
 

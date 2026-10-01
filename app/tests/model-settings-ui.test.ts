@@ -41,6 +41,8 @@ const renderCard = (
 test("all models expose deletion and protected missing models stay disabled", () => {
   const bundled = renderCard("builtin", "Included with BioPass");
   expect(bundled).toContain('aria-label="Delete Custom"');
+  expect(bundled).toContain("Included");
+  expect(bundled).toContain("File available");
   expect(bundled).toMatch(
     /disabled=""[^>]*aria-label="Delete Custom"|aria-label="Delete Custom"[^>]*disabled=""/,
   );
@@ -49,10 +51,10 @@ test("all models expose deletion and protected missing models stay disabled", ()
     "Selected in sign-in settings",
     "missing",
   );
-  expect(selected).toContain(
-    "Selected for Photo &amp; screen protection (off)",
-  );
-  expect(selected).toContain("Missing");
+  expect(selected).toContain("Photo &amp; screen protection (off)");
+  expect(selected).toContain("File missing");
+  expect(selected).toContain("Selected");
+  expect(selected).toContain("Imported");
   expect(selected).toContain('disabled=""');
   expect(renderCard("user", null)).not.toContain('disabled=""');
 });

@@ -34,7 +34,7 @@ export function ModelStatus({
         className={`bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 ${badgeClass} ${className}`}
       >
         <div className={`${dotClass} rounded-full bg-emerald-500`} />
-        {isSmall ? "Ready" : "Available"}
+        {isSmall ? "Ready" : "File available"}
       </Badge>
     );
   }
@@ -45,7 +45,7 @@ export function ModelStatus({
       className={`bg-red-500/10 text-red-600 hover:bg-red-500/20 border-red-200 dark:text-red-400 dark:border-red-900/50 dark:bg-red-500/10 ${badgeClass} ${className}`}
     >
       <AlertCircle size={iconSize} className="dark:text-red-400" />
-      Missing
+      {isSmall ? "Missing" : "File missing"}
     </Badge>
   );
 }
