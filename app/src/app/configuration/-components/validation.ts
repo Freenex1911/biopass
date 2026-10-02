@@ -99,7 +99,6 @@ export const biopassConfigSchema = z.object({
         threshold: thresholdSchema,
       }),
       recognition: z.object({
-        alignment: z.boolean(),
         model_id: z.string(),
         threshold: thresholdSchema,
       }),

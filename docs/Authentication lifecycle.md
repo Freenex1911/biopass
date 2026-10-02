@@ -34,11 +34,8 @@ No embeddings are persisted by this cache. A new authentication starts from the 
 
 ## Face alignment
 
-**Advanced settings → Face recognition → Face alignment** enables
-`methods.face.recognition.alignment`. Existing and new configurations default
-to false, so updates do not silently change recognition preprocessing.
-
-When enabled, the helper uses its bundled, pinned YuNet landmark model and
+Face alignment is always part of recognition, including for existing configurations.
+The helper uses its bundled, pinned YuNet landmark model and
 Eigen's Umeyama similarity transform to align both live RGB frames and saved
 face crops to the same 112px reference. Recognition remains EdgeFace unless
 the user explicitly changes that model. Enrolled embeddings are aligned lazily
@@ -51,11 +48,10 @@ and the configured PAM stack determines password fallback. A missing landmark
 model causes unavailability, never silent fallback to another preprocessing
 mode. IR verification and recognition thresholds are unchanged.
 
-Capturing a new enrollment with alignment enabled requires usable landmarks
-before the original crop is saved. Existing preview sessions read the current
-saved setting on each capture, so changing the setting does not require a
-camera restart. Original crops are not overwritten with 112px aligned images;
-enabling/disabling alignment therefore does not require new enrollment.
+Capturing a new enrollment requires usable landmarks before the original crop
+is saved. Original crops are not overwritten with 112px aligned images, so
+existing users do not need to enroll again. The former recognition.alignment
+setting is ignored and is removed when the app saves the configuration.
 
 The model and its license are installed under
 `/usr/share/com.ticklab.biopass/models`; the model is an internal preprocessing

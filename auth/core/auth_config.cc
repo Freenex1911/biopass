@@ -135,8 +135,6 @@ BiopassConfig readConfigFile(const std::string& config_path) {
             config.methods.face.detection.threshold = f["detection"]["threshold"].as<float>();
         }
         if (f["recognition"]) {
-          if (f["recognition"]["alignment"])
-            config.methods.face.recognition.alignment = f["recognition"]["alignment"].as<bool>();
           if (f["recognition"]["model_id"])
             config.methods.face.recognition.model_id =
                 f["recognition"]["model_id"].as<std::string>();

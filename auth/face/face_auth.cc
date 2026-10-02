@@ -55,8 +55,7 @@ bool FaceAuth::ensureModelsLoaded() {
 }
 
 bool FaceAuth::loadModels() {
-  if (detector_ && recognizer_ && (!face_config_.recognition.alignment || aligner_) &&
-      (!face_config_.anti_spoofing.enable || protection_)) {
+  if (detector_ && recognizer_ && aligner_ && (!face_config_.anti_spoofing.enable || protection_)) {
     return true;
   }
 
@@ -98,7 +97,7 @@ bool FaceAuth::loadModels() {
     return false;
   }
 
-  if (face_config_.recognition.alignment && !aligner_) {
+  if (!aligner_) {
     try {
       aligner_ = std::make_unique<FaceAlignment>(FaceAlignment::installedModelPath);
     } catch (const std::exception& error) {
