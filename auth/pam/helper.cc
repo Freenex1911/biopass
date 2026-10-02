@@ -182,6 +182,7 @@ int previewSession(const std::string& cameraPath, const std::string& modelPath, 
   }
 
   std::unique_ptr<FaceDetection> faceDetector;
+  std::unique_ptr<biopass::FaceAlignment> faceAligner;
   if (!modelPath.empty()) {
     try {
       faceDetector = std::make_unique<FaceDetection>(modelPath);
@@ -217,12 +218,13 @@ int previewSession(const std::string& cameraPath, const std::string& modelPath, 
       continue;
     }
 
-    if (line.rfind("CAPTURE ", 0) == 0) {
+    if (line.rfind("CAPTURE ", 0) == 0 || line.rfind("CAPTURE_ALIGNED ", 0) == 0) {
+      const bool validate_alignment = line.rfind("CAPTURE_ALIGNED ", 0) == 0;
       if (!faceDetector) {
         std::cout << "ERR detection model not loaded\n" << std::flush;
         continue;
       }
-      std::string outPath = line.substr(8);
+      std::string outPath = line.substr(validate_alignment ? 16 : 8);
       ImageRGB img = session->capture();
       if (img.empty()) {
         std::cout << "ERR capture failed\n" << std::flush;
@@ -232,6 +234,20 @@ int previewSession(const std::string& cameraPath, const std::string& modelPath, 
       if (faces.empty()) {
         std::cout << "NO_FACE\n" << std::flush;
         continue;
+      }
+      if (validate_alignment) {
+        try {
+          if (!faceAligner)
+            faceAligner = std::make_unique<biopass::FaceAlignment>(
+                biopass::FaceAlignment::installedModelPath);
+          if (!faceAligner->align(faces[0].image)) {
+            std::cout << "NO_LANDMARKS\n" << std::flush;
+            continue;
+          }
+        } catch (const std::exception& error) {
+          std::cout << "ERR face alignment unavailable\n" << std::flush;
+          continue;
+        }
       }
       if (!saveImage(outPath, faces[0].image)) {
         std::cout << "ERR save failed\n" << std::flush;
@@ -248,7 +264,7 @@ int previewSession(const std::string& cameraPath, const std::string& modelPath, 
 }
 
 int captureAndCropFace(const std::string& cameraPath, const std::string& outputPath,
-                       const std::string& modelPath) {
+                       const std::string& modelPath, bool validateAlignment) {
   std::optional<std::string> deviceOpt;
   if (!cameraPath.empty()) {
     deviceOpt = cameraPath;
@@ -280,6 +296,16 @@ int captureAndCropFace(const std::string& cameraPath, const std::string& outputP
   }
 
   ImageRGB faceCrop = detectedFaces[0].image;
+  if (validateAlignment) {
+    try {
+      biopass::FaceAlignment aligner(biopass::FaceAlignment::installedModelPath);
+      if (!aligner.align(faceCrop))
+        return 3;
+    } catch (const std::exception& error) {
+      spdlog::error("Face alignment unavailable: {}", error.what());
+      return 1;
+    }
+  }
   if (!saveImage(outputPath, faceCrop)) {
     spdlog::error("Could not save cropped image to: {}", outputPath);
     return 1;
@@ -367,6 +393,8 @@ int main(int argc, char** argv) {
   auto capture_cmd = app.add_subcommand("capture-face",
                                         "Capture a frame from a camera and crop the detected face");
   std::string capCameraPath, capOutputPath, capModelPath;
+  bool capAlign = false;
+  capture_cmd->add_flag("--align-faces", capAlign, "Require usable facial landmarks before saving");
   capture_cmd->add_option("--camera,-c", capCameraPath,
                           "Camera device path (e.g. /dev/video0). Empty = auto-select first.");
   capture_cmd->add_option("--output,-o", capOutputPath, "Output image path")->required();
@@ -407,7 +435,7 @@ int main(int argc, char** argv) {
   }
 
   if (app.got_subcommand(capture_cmd)) {
-    return captureAndCropFace(capCameraPath, capOutputPath, capModelPath);
+    return captureAndCropFace(capCameraPath, capOutputPath, capModelPath, capAlign);
   }
 
   if (app.got_subcommand(preview_cmd)) {

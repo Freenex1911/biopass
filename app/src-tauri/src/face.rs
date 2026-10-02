@@ -47,12 +47,18 @@ pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, St
         cmd_builder.arg("--camera").arg(cam);
     }
 
+    if app_config.methods.face.recognition.alignment {
+        cmd_builder.arg("--align-faces");
+    }
+
     let output = cmd_builder
         .output()
         .map_err(|e| format!("Failed to execute helper: {}", e))?;
 
     if output.status.success() {
         Ok(file_path.to_string_lossy().to_string())
+    } else if output.status.code() == Some(3) {
+        Err("Facial landmarks could not be detected. Face the camera clearly and try again.".into())
     } else if output.status.code() == Some(2) {
         Err("No face detected. Please position your face in front of the camera.".to_string())
     } else {

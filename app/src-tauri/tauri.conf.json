@@ -41,6 +41,9 @@
         "desktopTemplate": "scripts/biopass.desktop",
         "files": {
           "/usr/share/com.ticklab.biopass/download_models.sh": "scripts/download_models.sh",
+          "/usr/share/com.ticklab.biopass/models/yunet-landmarks.onnx": "../../auth/build/face/alignment/yunet-landmarks.onnx",
+          "/usr/share/com.ticklab.biopass/models/yunet-LICENSE": "../../auth/build/face/alignment/yunet-LICENSE",
+          "/usr/share/doc/biopass/eigen-LICENSE": "../../auth/build/face/alignment/eigen-LICENSE",
           "/lib/security/libbiopass_pam.so": "../../auth/build/pam/libbiopass_pam.so",
           "/usr/bin/biopass-helper": "../../auth/build/pam/biopass-helper",
           "/usr/lib/biopass/libbiopass_det.so": "../../auth/build/face/detection/libbiopass_det.so",
@@ -60,6 +63,9 @@
         "desktopTemplate": "scripts/biopass.desktop",
         "files": {
           "/usr/share/com.ticklab.biopass/download_models.sh": "scripts/download_models.sh",
+          "/usr/share/com.ticklab.biopass/models/yunet-landmarks.onnx": "../../auth/build/face/alignment/yunet-landmarks.onnx",
+          "/usr/share/com.ticklab.biopass/models/yunet-LICENSE": "../../auth/build/face/alignment/yunet-LICENSE",
+          "/usr/share/doc/biopass/eigen-LICENSE": "../../auth/build/face/alignment/eigen-LICENSE",
           "/lib64/security/libbiopass_pam.so": "../../auth/build/pam/libbiopass_pam.so",
           "/usr/bin/biopass-helper": "../../auth/build/pam/biopass-helper",
           "/usr/lib/biopass/libbiopass_det.so": "../../auth/build/face/detection/libbiopass_det.so",

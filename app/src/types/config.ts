@@ -49,6 +49,7 @@ export interface FaceMethodConfig {
     threshold: number;
   };
   recognition: {
+    alignment: boolean;
     model_id: string;
     threshold: number;
   };

@@ -1,6 +1,6 @@
 [package]
 name = "biopass"
-version = "1.4.1+freenex.3"
+version = "1.4.1+freenex.4"
 description = "Biometric Authentication System"
 authors = ["phucvinh57"]
 edition = "2021"

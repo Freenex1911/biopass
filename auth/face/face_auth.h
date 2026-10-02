@@ -6,6 +6,7 @@
 #include "auth_config.h"
 #include "auth_method.h"
 #include "camera_capture.h"
+#include "face_alignment.h"
 #include "face_as.h"
 #include "face_detection.h"
 #include "face_recognition.h"
@@ -53,6 +54,7 @@ class FaceAuth : public IAuthMethod {
   std::unique_ptr<ICameraCaptureSession> ir_camera_session_;
   std::unique_ptr<FaceDetection> detector_;
   std::unique_ptr<FaceRecognition> recognizer_;
+  std::unique_ptr<FaceAlignment> aligner_;
   std::unique_ptr<FaceAntiSpoofing> protection_;
   std::string username_;
   struct EnrolledFace {

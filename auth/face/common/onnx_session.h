@@ -17,6 +17,7 @@ class OnnxSession {
   OnnxSession(const std::string& model_path, const char* log_name);
 
   std::vector<Ort::Value> run(std::vector<float>& input, const std::vector<int64_t>& shape);
+  const std::vector<std::string>& outputNames() const { return output_names_str_; }
 
  private:
   Ort::Env env_;

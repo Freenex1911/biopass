@@ -47,6 +47,7 @@ struct DetectionConfig {
 struct RecognitionConfig {
   std::string model_id;
   float threshold = 0.5f;
+  bool alignment = false;
 };
 
 struct AntiSpoofingModelConfig {

@@ -20,3 +20,11 @@ add_test(NAME auth_cancellation COMMAND auth_cancellation_test)
 
 add_executable(recognition_probe recognition_probe.cpp)
 target_link_libraries(recognition_probe PRIVATE biopass_face)
+
+add_executable(face_alignment_test face_alignment.cpp)
+target_link_libraries(face_alignment_test PRIVATE biopass_alignment)
+target_compile_definitions(face_alignment_test PRIVATE
+    ALIGNMENT_MODEL="${CMAKE_BINARY_DIR}/face/alignment/yunet-landmarks.onnx"
+    MODEL_DIR="${BIOPASS_TEST_MODEL_DIR}"
+)
+add_test(NAME face_alignment COMMAND face_alignment_test)
