@@ -55,7 +55,8 @@ bool FaceAuth::ensureModelsLoaded() {
 }
 
 bool FaceAuth::loadModels() {
-  if (detector_ && recognizer_ && (!face_config_.anti_spoofing.enable || protection_)) {
+  if (detector_ && recognizer_ && (!face_config_.recognition.alignment || aligner_) &&
+      (!face_config_.anti_spoofing.enable || protection_)) {
     return true;
   }
 
@@ -97,6 +98,14 @@ bool FaceAuth::loadModels() {
     return false;
   }
 
+  if (face_config_.recognition.alignment && !aligner_) {
+    try {
+      aligner_ = std::make_unique<FaceAlignment>(FaceAlignment::installedModelPath);
+    } catch (const std::exception& error) {
+      spdlog::error("FaceAuth: Could not load landmark model: {}", error.what());
+      return false;
+    }
+  }
   if (face_config_.anti_spoofing.enable && !protection_) {
     try {
       const auto path = model_registry_.resolveModelPath(face_config_.anti_spoofing.model.model_id);
@@ -183,6 +192,20 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
   }
 
   ImageRGB face = detectedImages[0].image;
+  ImageRGB recognition_face = face;
+  if (aligner_) {
+    try {
+      const auto aligned = aligner_->align(loginFace);
+      if (!aligned) {
+        spdlog::debug("FaceAuth: No unambiguous usable facial landmarks; retrying");
+        return AuthResult::Retry;
+      }
+      recognition_face = *aligned;
+    } catch (const std::exception& error) {
+      spdlog::warn("FaceAuth: Face alignment failed: {}", error.what());
+      return AuthResult::Retry;
+    }
+  }
 
   ensureIrSession();
   if (face_config_.camera_selection.mode != "legacy" &&
@@ -204,7 +227,7 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
   if (cancel_signal && cancel_signal->load())
     return AuthResult::Failure;
   // One live embedding per attempt; enrolled embeddings are reused until the session ends.
-  const auto live_embedding = recognizer_->embedding(face);
+  const auto live_embedding = recognizer_->embedding(recognition_face);
   for (auto& enrolled : enrolled_faces_) {
     if (cancel_signal && cancel_signal->load())
       return AuthResult::Failure;
@@ -214,8 +237,17 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
       enrolled.prepared = true;
       try {
         const auto image = readImage(enrolled.path);
-        if (!image.empty())
-          enrolled.embedding = recognizer_->embedding(image);
+        if (!image.empty()) {
+          if (aligner_) {
+            const auto aligned = aligner_->align(image);
+            if (aligned)
+              enrolled.embedding = recognizer_->embedding(*aligned);
+            else
+              spdlog::warn("FaceAuth: No usable landmarks in enrolled face '{}'", enrolled.path);
+          } else {
+            enrolled.embedding = recognizer_->embedding(image);
+          }
+        }
       } catch (const std::exception& e) {
         spdlog::warn("FaceAuth: Could not prepare enrolled face '{}': {}", enrolled.path, e.what());
       }
@@ -229,6 +261,11 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
       return AuthResult::Success;
   }
 
+  if (std::none_of(enrolled_faces_.begin(), enrolled_faces_.end(),
+                   [](const EnrolledFace& enrolled) { return !enrolled.embedding.empty(); })) {
+    spdlog::warn("FaceAuth: No enrolled faces could be prepared for recognition");
+    return AuthResult::Unavailable;
+  }
   if (config.debug) {
     saveFailedFace(username, face, "not_similar");
   }

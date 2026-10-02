@@ -48,6 +48,7 @@ target_link_libraries(biopass_face_common
 add_dependencies(biopass_face_common libcamera_ext)
 
 # Face auth wrapper library
+add_subdirectory(alignment)
 add_library(biopass_face STATIC
     face_auth.cc
 )
@@ -71,5 +72,6 @@ target_link_libraries(biopass_face
     biopass_as
     biopass_face_common
     biopass_stb
+    biopass_alignment
     ${ONNXRUNTIME_LIB}
 )

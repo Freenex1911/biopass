@@ -19,7 +19,11 @@ export function configFixture(): BiopassConfig {
         camera: null,
         camera_selection: { mode: "legacy", pairs: [], fixed_pair: null },
         detection: { model_id: "detection", threshold: 0.5 },
-        recognition: { model_id: "recognition", threshold: 0.5 },
+        recognition: {
+          alignment: false,
+          model_id: "recognition",
+          threshold: 0.5,
+        },
         anti_spoofing: {
           enable: false,
           model: { model_id: "protection", threshold: 0.8 },

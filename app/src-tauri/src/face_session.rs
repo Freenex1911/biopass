@@ -237,7 +237,13 @@ fn capture_preview(app: AppHandle) -> Result<String, String> {
     let file_path = faces_dir.join(format!("face_{}.jpg", ts));
 
     let mut io = io_handle.lock().map_err(|e| e.to_string())?;
-    let cmd = format!("CAPTURE {}\n", file_path.display());
+    let alignment = load_config(app.clone())?.methods.face.recognition.alignment;
+    let command = if alignment {
+        "CAPTURE_ALIGNED"
+    } else {
+        "CAPTURE"
+    };
+    let cmd = format!("{command} {}\n", file_path.display());
     io.stdin
         .write_all(cmd.as_bytes())
         .map_err(|e| format!("write CAPTURE: {e}"))?;
@@ -258,6 +264,9 @@ fn capture_preview(app: AppHandle) -> Result<String, String> {
     };
     match response.as_str() {
         "OK" => Ok(file_path.to_string_lossy().to_string()),
+        "NO_LANDMARKS" => Err(
+            "Facial landmarks could not be detected. Face the camera clearly and try again.".into(),
+        ),
         "NO_FACE" => {
             Err("No face detected. Please position your face in front of the camera.".into())
         }

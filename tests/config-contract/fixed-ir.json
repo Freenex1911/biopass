@@ -26,7 +26,8 @@
       },
       "recognition": {
         "model_id": "edgeface-s-gamma-05",
-        "threshold": 0.5
+        "threshold": 0.5,
+        "alignment": true
       },
       "anti_spoofing": {
         "enable": false,

@@ -1,7 +1,7 @@
 {
   "name": "biopass",
   "private": true,
-  "version": "1.4.1+freenex.3",
+  "version": "1.4.1+freenex.4",
   "type": "module",
   "scripts": {
     "dev": "vite",

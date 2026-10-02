@@ -32,6 +32,8 @@ int main(int argc, char** argv) {
           f.detection.threshold == face["detection"]["threshold"].as<float>());
   require(f.recognition.model_id == face["recognition"]["model_id"].as<std::string>() &&
           f.recognition.threshold == face["recognition"]["threshold"].as<float>());
+  require(f.recognition.alignment ==
+          (face["recognition"]["alignment"] ? face["recognition"]["alignment"].as<bool>() : false));
   const auto protection = face["anti_spoofing"];
   require(f.anti_spoofing.enable == protection["enable"].as<bool>());
   require(f.anti_spoofing.model.model_id == protection["model"]["model_id"].as<std::string>() &&

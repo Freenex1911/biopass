@@ -32,6 +32,38 @@ Detection, recognition and optional AI protection models are reused for an authe
 
 No embeddings are persisted by this cache. A new authentication starts from the current saved photos, models and settings. Recognition thresholds and IR verification requirements are unchanged.
 
+## Face alignment
+
+**Advanced settings → Face recognition → Face alignment** enables
+`methods.face.recognition.alignment`. Existing and new configurations default
+to false, so updates do not silently change recognition preprocessing.
+
+When enabled, the helper uses its bundled, pinned YuNet landmark model and
+Eigen's Umeyama similarity transform to align both live RGB frames and saved
+face crops to the same 112px reference. Recognition remains EdgeFace unless
+the user explicitly changes that model. Enrolled embeddings are aligned lazily
+and cached only for the current authentication session. Original photos are
+retained, and AI anti-spoofing still receives the original detector crop.
+
+Missing or ambiguous landmarks cause a live retry; unusable enrollment photos
+are skipped. If no enrollment can be prepared, the face method is unavailable
+and the configured PAM stack determines password fallback. A missing landmark
+model causes unavailability, never silent fallback to another preprocessing
+mode. IR verification and recognition thresholds are unchanged.
+
+Capturing a new enrollment with alignment enabled requires usable landmarks
+before the original crop is saved. Existing preview sessions read the current
+saved setting on each capture, so changing the setting does not require a
+camera restart. Original crops are not overwritten with 112px aligned images;
+enabling/disabling alignment therefore does not require new enrollment.
+
+The model and its license are installed under
+`/usr/share/com.ticklab.biopass/models`; the model is an internal preprocessing
+resource, not a selectable recognition/detection model in the user's registry.
+The download revision and SHA-256 are pinned in `face/alignment/CMakeLists.txt`.
+It adds no OpenCV runtime dependency. Eigen is a build-time header dependency;
+its license is included in the package.
+
 ## Preview lifecycle
 
 Preview and capture commands run on blocking workers rather than the UI dispatch thread. Helper startup and photo capture responses have a 10-second deadline; a frame response has a 5-second deadline. Protocol headers are limited to 1024 bytes and frames to 8 MiB. The deadline covers the complete response, not just each individual read.
