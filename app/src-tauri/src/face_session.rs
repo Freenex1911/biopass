@@ -237,13 +237,7 @@ fn capture_preview(app: AppHandle) -> Result<String, String> {
     let file_path = faces_dir.join(format!("face_{}.jpg", ts));
 
     let mut io = io_handle.lock().map_err(|e| e.to_string())?;
-    let alignment = load_config(app.clone())?.methods.face.recognition.alignment;
-    let command = if alignment {
-        "CAPTURE_ALIGNED"
-    } else {
-        "CAPTURE"
-    };
-    let cmd = format!("{command} {}\n", file_path.display());
+    let cmd = format!("CAPTURE_ALIGNED {}\n", file_path.display());
     io.stdin
         .write_all(cmd.as_bytes())
         .map_err(|e| format!("write CAPTURE: {e}"))?;

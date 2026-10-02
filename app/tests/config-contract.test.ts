@@ -13,7 +13,7 @@ for (const name of ["legacy", "color-only", "fixed-ir"]) {
     );
     // These defaults are supplied by Rust on the config-load IPC boundary.
     config.strategy.show_auth_status ??= false;
-    config.methods.face.recognition.alignment ??= false;
+    delete config.methods.face.recognition.alignment;
     config.methods.face.camera_selection ??= {
       mode: "legacy",
       pairs: [],

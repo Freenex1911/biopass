@@ -182,25 +182,6 @@ export function FaceSetting({ active = true }: { active?: boolean }) {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-4 mt-4">
-              <div className="grid gap-1">
-                <Label htmlFor="face-alignment">Face alignment</Label>
-                <p className="text-xs text-muted-foreground">
-                  Align saved photos and camera images before comparing faces to
-                  improve recognition when your head is tilted.
-                </p>
-              </div>
-              <Switch
-                id="face-alignment"
-                checked={config.recognition.alignment}
-                onCheckedChange={(checked) =>
-                  setValue("methods.face.recognition.alignment", checked, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-              />
-            </div>
           </div>
 
           <section

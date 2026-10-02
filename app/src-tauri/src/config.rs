@@ -123,8 +123,6 @@ pub struct DetectionConfig {
 pub struct RecognitionConfig {
     pub model_id: String,
     pub threshold: f32,
-    #[serde(default)]
-    pub alignment: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -179,7 +177,6 @@ fn get_default_config() -> BiopassConfig {
                     threshold: 0.5,
                 },
                 recognition: RecognitionConfig {
-                    alignment: false,
                     model_id: "edgeface-s-gamma-05".to_string(),
                     threshold: 0.5,
                 },
@@ -356,12 +353,10 @@ mod tests {
                 expected["methods"]["face"]["camera_selection"] =
                     serde_json::json!({"mode":"legacy","pairs":[],"fixed_pair":null});
             }
-            if expected["methods"]["face"]["recognition"]
-                .get("alignment")
-                .is_none()
-            {
-                expected["methods"]["face"]["recognition"]["alignment"] = false.into();
-            }
+            expected["methods"]["face"]["recognition"]
+                .as_object_mut()
+                .unwrap()
+                .remove("alignment");
             // The inference backends intentionally use float32 thresholds.
             for pointer in [
                 "/methods/face/detection/threshold",

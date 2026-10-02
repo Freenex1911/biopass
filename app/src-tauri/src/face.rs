@@ -47,9 +47,7 @@ pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, St
         cmd_builder.arg("--camera").arg(cam);
     }
 
-    if app_config.methods.face.recognition.alignment {
-        cmd_builder.arg("--align-faces");
-    }
+    cmd_builder.arg("--align-faces");
 
     let output = cmd_builder
         .output()
