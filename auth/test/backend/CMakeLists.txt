@@ -17,3 +17,6 @@ add_test(NAME embedding_cache COMMAND embedding_cache_test)
 add_executable(auth_cancellation_test auth_cancellation.cpp)
 target_link_libraries(auth_cancellation_test PRIVATE biopass_core)
 add_test(NAME auth_cancellation COMMAND auth_cancellation_test)
+
+add_executable(recognition_probe recognition_probe.cpp)
+target_link_libraries(recognition_probe PRIVATE biopass_face)
