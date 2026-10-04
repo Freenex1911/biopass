@@ -28,3 +28,11 @@ target_compile_definitions(face_alignment_test PRIVATE
     MODEL_DIR="${BIOPASS_TEST_MODEL_DIR}"
 )
 add_test(NAME face_alignment COMMAND face_alignment_test)
+
+add_executable(image_processing_test image_processing.cpp)
+target_link_libraries(image_processing_test PRIVATE biopass_face_common)
+add_test(NAME image_processing COMMAND image_processing_test)
+add_executable(model_validation_test model_validation.cpp)
+target_link_libraries(model_validation_test PRIVATE biopass_onnx)
+target_compile_definitions(model_validation_test PRIVATE MODEL_DIR="${BIOPASS_TEST_MODEL_DIR}")
+add_test(NAME model_validation COMMAND model_validation_test)

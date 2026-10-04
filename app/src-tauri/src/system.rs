@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::process::Command;
+use tokio::process::Command;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct VideoDeviceInfo {
@@ -25,13 +25,12 @@ pub fn get_current_username() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
+pub async fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
     // Enumerate through the same backend as authentication, excluding
     // metadata-only nodes and identifying RGB/IR streams independently.
-    let output = Command::new(crate::face_session::helper_path())
-        .arg("list-cameras")
-        .output()
-        .map_err(|e| format!("Could not list capture cameras: {e}"))?;
+    let mut command = Command::new(crate::face_session::helper_path());
+    command.arg("list-cameras");
+    let output = crate::helper_io::output(command, std::time::Duration::from_secs(10)).await?;
     if !output.status.success() {
         return Err("Camera discovery failed. Update the app and biopass-helper together.".into());
     }

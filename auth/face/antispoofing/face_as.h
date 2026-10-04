@@ -20,7 +20,7 @@ struct SpoofResult {
 class FaceAntiSpoofing {
  public:
   FaceAntiSpoofing(const std::string& ckpt, int imgsz = 128, const float threshold = 0.8,
-                   const std::string& model_type = "mobilenetv3");
+                   const std::string& model_type = "auto");
 
   SpoofResult inference(const ImageRGB& image);
 

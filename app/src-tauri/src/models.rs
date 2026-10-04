@@ -1,7 +1,12 @@
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tokio::io::AsyncWriteExt;
+use tokio_util::sync::CancellationToken;
 
 use futures_util::StreamExt;
 use rusqlite::Connection;
@@ -17,6 +22,45 @@ const VALID_MODEL_TYPES: [&str; 3] = ["detection", "recognition", "anti_spoofing
 const PROGRESS_EVENT: &str = "model-download-progress";
 const PROGRESS_THROTTLE_MS: u128 = 150;
 const MAX_NAME_LEN: usize = 200;
+const MAX_MODEL_BYTES: u64 = 512 * 1024 * 1024;
+static DOWNLOADS: LazyLock<Mutex<HashMap<String, CancellationToken>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+struct DownloadRegistration(String);
+impl Drop for DownloadRegistration {
+    fn drop(&mut self) {
+        if let Ok(mut downloads) = DOWNLOADS.lock() {
+            downloads.remove(&self.0);
+        }
+    }
+}
+#[tauri::command]
+pub fn cancel_model_download(request_id: String) -> Result<(), String> {
+    if let Some(token) = DOWNLOADS
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&request_id)
+    {
+        token.cancel();
+    }
+    Ok(())
+}
+async fn validate_import(path: &Path, model_type: &str) -> Result<(), String> {
+    let mut command = tokio::process::Command::new(crate::face_session::helper_path());
+    command
+        .arg("validate-model")
+        .arg("--model")
+        .arg(path)
+        .arg("--type")
+        .arg(model_type);
+    let output = crate::helper_io::output(command, Duration::from_secs(30)).await?;
+    if !output.status.success() {
+        return Err(format!(
+            "Model is incompatible: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(())
+}
 
 #[tauri::command]
 pub fn list_models(app: AppHandle, model_type: Option<String>) -> Result<Vec<Model>, String> {
@@ -161,34 +205,6 @@ fn unique_model_id(conn: &Connection, base: &str) -> Result<String, String> {
     Err("Failed to allocate a unique model id".to_string())
 }
 
-/// ONNX has no fixed magic number, but a serialized ModelProto is a protobuf
-/// message whose first field (ir_version, field 1, varint) means real .onnx
-/// files begin with byte 0x08. This is a heuristic guard against obviously
-/// wrong content (HTML error pages, JSON, etc.), not a full parse.
-fn looks_like_onnx(bytes: &[u8]) -> bool {
-    matches!(bytes.first(), Some(0x08))
-}
-
-fn validate_onnx_file(path: &Path) -> Result<(), String> {
-    if path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        != Some("onnx".to_string())
-    {
-        return Err("Selected file must have a .onnx extension".to_string());
-    }
-    let mut file = File::open(path).map_err(|e| format!("Failed to open model file: {}", e))?;
-    let mut header = [0u8; 16];
-    let n = file
-        .read(&mut header)
-        .map_err(|e| format!("Failed to read model file: {}", e))?;
-    if n == 0 || !looks_like_onnx(&header[..n]) {
-        return Err("File does not look like a valid ONNX model".to_string());
-    }
-    Ok(())
-}
-
 fn hex_encode(bytes: impl AsRef<[u8]>) -> String {
     bytes
         .as_ref()
@@ -213,103 +229,162 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("sha256:{}", hex_encode(hasher.finalize())))
 }
 
+async fn stream_download(
+    client: reqwest::Client,
+    parsed: reqwest::Url,
+    dir: PathBuf,
+    max_bytes: u64,
+    progress: impl Fn(u64, Option<u64>),
+) -> Result<(tempfile::NamedTempFile, String), String> {
+    let response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Download failed: {e}"))?;
+    let total = response.content_length();
+    if total.is_some_and(|size| size > max_bytes) {
+        return Err("Model exceeds the download size limit".into());
+    }
+    let tmp = tempfile::NamedTempFile::new_in(&dir).map_err(|e| e.to_string())?;
+    let mut file = tokio::fs::File::from_std(tmp.reopen().map_err(|e| e.to_string())?);
+    let mut stream = response.bytes_stream();
+    let mut downloaded = 0u64;
+    let mut hasher = Sha256::new();
+    let mut last_emit = Instant::now();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Download failed: {e}"))?;
+        downloaded = downloaded
+            .checked_add(chunk.len() as u64)
+            .ok_or("Invalid download size")?;
+        if downloaded > max_bytes {
+            return Err("Model exceeds the download size limit".into());
+        }
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        hasher.update(&chunk);
+        if last_emit.elapsed().as_millis() >= PROGRESS_THROTTLE_MS {
+            progress(downloaded, total);
+            last_emit = Instant::now();
+        }
+    }
+    if downloaded == 0 {
+        return Err("Downloaded file is empty".into());
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    file.sync_all().await.map_err(|e| e.to_string())?;
+    drop(file);
+    progress(downloaded, total);
+    let checksum = format!("sha256:{}", hex_encode(hasher.finalize()));
+    Ok((tmp, checksum))
+}
+
 #[tauri::command]
 pub async fn add_model_from_url(
     app: AppHandle,
     name: String,
     model_type: String,
     url: String,
+    request_id: String,
 ) -> Result<Model, String> {
     validate_model_type(&model_type)?;
     let name = validate_name(&name)?;
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err("URL must start with http:// or https://".to_string());
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "Invalid download URL")?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("URL must start with http:// or https://".into());
     }
-
-    let dir = models_dir(&app)?;
-    let id = {
-        let conn = db::open(&app)?;
-        unique_model_id(&conn, &slugify(&name))?
+    if request_id.is_empty() || request_id.len() > 100 {
+        return Err("Invalid download request".into());
+    }
+    let token = CancellationToken::new();
+    {
+        let mut downloads = DOWNLOADS.lock().map_err(|e| e.to_string())?;
+        if downloads.contains_key(&request_id) {
+            return Err("Download is already running".into());
+        }
+        downloads.insert(request_id.clone(), token.clone());
+    }
+    let _registration = DownloadRegistration(request_id.clone());
+    let download = async {
+        let preparation = app.clone();
+        let dir = tauri::async_runtime::spawn_blocking(move || models_dir(&preparation))
+            .await
+            .map_err(|e| e.to_string())??;
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(300))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let (tmp, checksum) =
+            stream_download(client, parsed, dir, MAX_MODEL_BYTES, |downloaded, total| {
+                let _ = app.emit(
+                    PROGRESS_EVENT,
+                    DownloadProgress {
+                        id: request_id.clone(),
+                        downloaded,
+                        total,
+                    },
+                );
+            })
+            .await?;
+        validate_import(tmp.path(), &model_type).await?;
+        Ok::<_, String>((tmp, checksum))
     };
-
-    let response = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Failed to start download: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!("Download failed with status {}", response.status()));
-    }
-    let total = response.content_length();
-
-    let mut tmp = tempfile::NamedTempFile::new_in(&dir)
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
-    let mut hasher = Sha256::new();
-    let mut downloaded: u64 = 0;
-    let mut last_emit = Instant::now();
-    let mut header_checked = false;
-    let mut stream = response.bytes_stream();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Download error: {}", e))?;
-        if !header_checked && !chunk.is_empty() {
-            header_checked = true;
-            if !looks_like_onnx(&chunk) {
-                return Err("Downloaded file does not look like a valid ONNX model".to_string());
-            }
-        }
-        tmp.write_all(&chunk)
-            .map_err(|e| format!("Failed to write model file: {}", e))?;
-        hasher.update(&chunk);
-        downloaded += chunk.len() as u64;
-
-        if last_emit.elapsed().as_millis() >= PROGRESS_THROTTLE_MS {
-            let _ = app.emit(
-                PROGRESS_EVENT,
-                DownloadProgress {
-                    id: id.clone(),
-                    downloaded,
-                    total,
-                },
-            );
-            last_emit = Instant::now();
-        }
-    }
-    let _ = app.emit(
-        PROGRESS_EVENT,
-        DownloadProgress {
-            id: id.clone(),
-            downloaded,
-            total,
-        },
-    );
-
-    if !header_checked {
-        return Err("Downloaded file is empty".to_string());
-    }
-    tmp.as_file()
-        .sync_all()
-        .map_err(|e| format!("Failed to sync model file: {}", e))?;
-
-    let checksum = format!("sha256:{}", hex_encode(hasher.finalize()));
-    let final_path = dir.join(format!("{id}.onnx"));
-    tmp.persist(&final_path)
-        .map_err(|e| format!("Failed to save model file: {}", e))?;
-
-    let conn = db::open(&app)?;
-    db::upsert_model(
-        &conn,
-        &id,
-        &name,
-        &model_type,
-        &final_path.to_string_lossy(),
-        None,
-        Some(&checksum),
-        "user",
-    )?;
-    db::get_model(&conn, &id)?.ok_or_else(|| "Model vanished after insert".to_string())
+    let (tmp, checksum) = tokio::select! {
+        biased;
+        _ = token.cancelled() => return Err("Download cancelled".into()),
+        result = download => result?,
+    };
+    // Publication is short and atomic with respect to cancellation: after
+    // validation finishes, the import is committed as a single operation.
+    tauri::async_runtime::spawn_blocking(move || {
+        publish_import(&app, &name, &model_type, tmp, checksum)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
-
+fn publish_import(
+    app: &AppHandle,
+    name: &str,
+    model_type: &str,
+    tmp: tempfile::NamedTempFile,
+    checksum: String,
+) -> Result<Model, String> {
+    let mut conn = db::open(app)?;
+    let transaction = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let id = unique_model_id(&transaction, &slugify(name))?;
+    let final_path = tmp
+        .path()
+        .parent()
+        .ok_or("Missing model directory")?
+        .join(format!("{id}.onnx"));
+    tmp.persist_noclobber(&final_path)
+        .map_err(|e| format!("Failed to save model: {e}"))?;
+    let registered = (|| {
+        db::upsert_model(
+            &transaction,
+            &id,
+            name,
+            model_type,
+            &final_path.to_string_lossy(),
+            None,
+            Some(&checksum),
+            "user",
+        )?;
+        let model = db::get_model(&transaction, &id)?.ok_or("Model vanished after insert")?;
+        transaction.commit().map_err(|e| e.to_string())?;
+        Ok(model)
+    })();
+    if registered.is_err() {
+        let _ = std::fs::remove_file(final_path);
+    }
+    registered
+}
 #[tauri::command]
-pub fn add_model_from_file(
+pub async fn add_model_from_file(
     app: AppHandle,
     name: String,
     model_type: String,
@@ -317,40 +392,41 @@ pub fn add_model_from_file(
 ) -> Result<Model, String> {
     validate_model_type(&model_type)?;
     let name = validate_name(&name)?;
-
-    let src = PathBuf::from(&src_path);
-    validate_onnx_file(&src)?;
-
-    let dir = models_dir(&app)?;
-    let conn = db::open(&app)?;
-    let id = unique_model_id(&conn, &slugify(&name))?;
-    let final_path = dir.join(format!("{id}.onnx"));
-
-    let mut tmp = tempfile::NamedTempFile::new_in(&dir)
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
-    let mut src_file =
-        File::open(&src).map_err(|e| format!("Failed to open source file: {}", e))?;
-    std::io::copy(&mut src_file, tmp.as_file_mut())
-        .map_err(|e| format!("Failed to copy model file: {}", e))?;
-    tmp.as_file()
-        .sync_all()
-        .map_err(|e| format!("Failed to sync model file: {}", e))?;
-
-    let checksum = sha256_file(tmp.path())?;
-    tmp.persist(&final_path)
-        .map_err(|e| format!("Failed to save model file: {}", e))?;
-
-    db::upsert_model(
-        &conn,
-        &id,
-        &name,
-        &model_type,
-        &final_path.to_string_lossy(),
-        None,
-        Some(&checksum),
-        "user",
-    )?;
-    db::get_model(&conn, &id)?.ok_or_else(|| "Model vanished after insert".to_string())
+    let preparation = app.clone();
+    let (tmp, checksum) = tauri::async_runtime::spawn_blocking(move || {
+        let src = PathBuf::from(src_path);
+        if !src
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("onnx"))
+        {
+            return Err("Selected file must have a .onnx extension".into());
+        }
+        if std::fs::metadata(&src).map_err(|e| e.to_string())?.len() > MAX_MODEL_BYTES {
+            return Err("Model exceeds the 512 MiB size limit".into());
+        }
+        let dir = models_dir(&preparation)?;
+        let mut tmp = tempfile::NamedTempFile::new_in(dir).map_err(|e| e.to_string())?;
+        let mut source = File::open(src).map_err(|e| e.to_string())?;
+        let copied = std::io::copy(
+            &mut std::io::Read::by_ref(&mut source).take(MAX_MODEL_BYTES + 1),
+            tmp.as_file_mut(),
+        )
+        .map_err(|e| e.to_string())?;
+        if copied == 0 || copied > MAX_MODEL_BYTES {
+            return Err("Model is empty or exceeds the 512 MiB size limit".into());
+        }
+        tmp.as_file().sync_all().map_err(|e| e.to_string())?;
+        let checksum = sha256_file(tmp.path())?;
+        Ok::<_, String>((tmp, checksum))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    validate_import(tmp.path(), &model_type).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        publish_import(&app, &name, &model_type, tmp, checksum)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -373,6 +449,96 @@ pub fn rename_model(app: AppHandle, id: String, name: String) -> Result<Model, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    async fn response_server(
+        response: &'static [u8],
+        stall: bool,
+    ) -> (reqwest::Url, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            let _ = socket.read(&mut request).await;
+            socket.write_all(response).await.unwrap();
+            if stall {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+        (
+            reqwest::Url::parse(&format!("http://{address}/model.onnx")).unwrap(),
+            task,
+        )
+    }
+    #[tokio::test]
+    async fn rejects_large_downloads_with_and_without_content_length() {
+        for response in [
+            b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n0123456789abcdef0123456789abcdef"
+                .as_slice(),
+        ] {
+            let (url, server) = response_server(response, false).await;
+            let dir = tempfile::tempdir().unwrap();
+            assert!(stream_download(
+                reqwest::Client::new(),
+                url,
+                dir.path().into(),
+                16,
+                |_, _| {}
+            )
+            .await
+            .is_err());
+            server.await.unwrap();
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        }
+    }
+    #[tokio::test]
+    async fn stalled_and_cancelled_downloads_remove_partial_files() {
+        for cancel in [false, true] {
+            let (url, server) = response_server(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n08",
+                true,
+            )
+            .await;
+            let dir = tempfile::tempdir().unwrap();
+            let client = reqwest::Client::builder()
+                .read_timeout(Duration::from_millis(50))
+                .build()
+                .unwrap();
+            let download = stream_download(client, url, dir.path().into(), 1024, |_, _| {});
+            if cancel {
+                tokio::select! { _ = tokio::time::sleep(Duration::from_millis(20)) => {}, result = download => panic!("Unexpected early completion: {result:?}") }
+            } else {
+                assert!(download.await.is_err());
+            }
+            server.abort();
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        }
+    }
+    #[tokio::test]
+    async fn downloaded_bytes_and_checksum_are_preserved() {
+        let (url, server) = response_server(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc",
+            false,
+        )
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let (file, checksum) = stream_download(
+            reqwest::Client::new(),
+            url,
+            dir.path().into(),
+            1024,
+            |_, _| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(file.path()).unwrap(), b"abc");
+        assert_eq!(
+            checksum,
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        server.await.unwrap();
+    }
     fn fixture() -> (Connection, tempfile::TempDir, Model, BiopassConfig) {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!("../migrations/001_initial.sql"))
@@ -392,7 +558,7 @@ mod tests {
         )
         .unwrap();
         let model = db::get_model(&conn, "custom").unwrap().unwrap();
-        let config = serde_yaml::from_str(
+        let config = serde_saphyr::from_str(
             r#"
 schema_version: 2
 appearance: system

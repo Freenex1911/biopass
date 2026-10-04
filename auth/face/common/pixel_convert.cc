@@ -1,29 +1,13 @@
 #include "pixel_convert.h"
 
+#include <libyuv/convert_argb.h>
+#include <libyuv/convert_from_argb.h>
 #include <turbojpeg.h>
 
 #include <algorithm>
 #include <cstring>
 
 namespace biopass {
-
-namespace {
-
-inline uint8_t clamp_u8(int value) {
-  return static_cast<uint8_t>(std::min(255, std::max(0, value)));
-}
-
-// BT.601 limited-range YUV -> RGB.
-inline void yuvToRgbPixel(int y, int u, int v, uint8_t* dst) {
-  const int c = y - 16;
-  const int d = u - 128;
-  const int e = v - 128;
-  dst[0] = clamp_u8((298 * c + 409 * e + 128) >> 8);
-  dst[1] = clamp_u8((298 * c - 100 * d - 208 * e + 128) >> 8);
-  dst[2] = clamp_u8((298 * c + 516 * d + 128) >> 8);
-}
-
-}  // namespace
 
 bool yuyvToRgb(const uint8_t* src, size_t size, int width, int height, int stride, ImageRGB& out) {
   if (!src || width <= 0 || height <= 0) {
@@ -36,22 +20,15 @@ bool yuyvToRgb(const uint8_t* src, size_t size, int width, int height, int strid
     return false;
   }
 
+  // Packed YUYV needs complete pixel pairs.
+  if (width % 2 != 0)
+    return false;
   out = ImageRGB(width, height);
-  for (int y = 0; y < height; ++y) {
-    const uint8_t* src_row = src + static_cast<size_t>(y) * row_stride;
-    uint8_t* dst_row = out.ptr() + static_cast<size_t>(y) * width * 3;
-    for (int x = 0; x + 1 < width; x += 2) {
-      const uint8_t y0 = src_row[x * 2 + 0];
-      const uint8_t u = src_row[x * 2 + 1];
-      const uint8_t y1 = src_row[x * 2 + 2];
-      const uint8_t v = src_row[x * 2 + 3];
-      yuvToRgbPixel(y0, u, v, dst_row + x * 3);
-      yuvToRgbPixel(y1, u, v, dst_row + (x + 1) * 3);
-    }
-    // YUYV encodes pixels in pairs; a trailing unpaired column (odd width,
-    // which real cameras never report) is left black.
-  }
-  return true;
+  std::vector<uint8_t> argb(static_cast<size_t>(width) * height * 4);
+  if (libyuv::YUY2ToARGB(src, static_cast<int>(row_stride), argb.data(), width * 4, width,
+                         height) != 0)
+    return false;
+  return libyuv::ARGBToRAW(argb.data(), width * 4, out.ptr(), width * 3, width, height) == 0;
 }
 
 bool greyToRgb(const uint8_t* src, size_t size, int width, int height, int stride, ImageRGB& out) {
@@ -65,16 +42,9 @@ bool greyToRgb(const uint8_t* src, size_t size, int width, int height, int strid
   }
 
   out = ImageRGB(width, height);
-  for (int y = 0; y < height; ++y) {
-    const uint8_t* src_row = src + static_cast<size_t>(y) * row_stride;
-    uint8_t* dst_row = out.ptr() + static_cast<size_t>(y) * width * 3;
-    for (int x = 0; x < width; ++x) {
-      const uint8_t value = src_row[x];
-      dst_row[x * 3 + 0] = value;
-      dst_row[x * 3 + 1] = value;
-      dst_row[x * 3 + 2] = value;
-    }
-  }
+  cv::Mat grey(height, width, CV_8UC1, const_cast<uint8_t*>(src), row_stride);
+  auto destination = imageMat(out);
+  cv::cvtColor(grey, destination, cv::COLOR_GRAY2RGB);
   return true;
 }
 

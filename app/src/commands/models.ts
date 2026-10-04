@@ -17,12 +17,22 @@ function list(modelType?: ModelType) {
   });
 }
 
-function addFromUrl(name: string, modelType: ModelType, url: string) {
+function addFromUrl(
+  name: string,
+  modelType: ModelType,
+  url: string,
+  requestId: string,
+) {
   return invokeCommand<Model>("add_model_from_url", {
     name,
     modelType,
     url,
+    requestId,
   });
+}
+
+function cancelDownload(requestId: string) {
+  return invokeCommand<void>("cancel_model_download", { requestId });
 }
 
 function addFromFile(name: string, modelType: ModelType, srcPath: string) {
@@ -59,6 +69,7 @@ export const models = {
   list,
   listManagement,
   addFromUrl,
+  cancelDownload,
   addFromFile,
   remove,
   rename,

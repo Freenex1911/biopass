@@ -382,6 +382,11 @@ int main(int argc, char** argv) {
   app.set_version_flag("--version,-v", BIOPASS_VERSION);
   app.require_subcommand(1, 1);
 
+  auto validate_cmd = app.add_subcommand("validate-model", "Validate an imported ONNX model");
+  std::string validatePath, validateType;
+  validate_cmd->add_option("--model", validatePath)->required();
+  validate_cmd->add_option("--type", validateType)->required();
+
   auto crop_cmd = app.add_subcommand("crop-face", "Crop a face from an image");
   std::string inputPath, outputPath, modelPath;
   crop_cmd->add_option("--input,-i", inputPath, "Input image path")->required();
@@ -424,6 +429,18 @@ int main(int argc, char** argv) {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& e) {
     return app.exit(e);
+  }
+
+  if (app.got_subcommand(validate_cmd)) {
+    try {
+      biopass::OnnxSession session(validatePath, "ModelValidation");
+      session.validate(validateType);
+      std::cout << "OK\n";
+      return 0;
+    } catch (const std::exception& error) {
+      std::cerr << error.what() << "\n";
+      return 1;
+    }
   }
 
   if (app.got_subcommand(crop_cmd)) {

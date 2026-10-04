@@ -1,3 +1,4 @@
+import type { Channel } from "@tauri-apps/api/core";
 import type { VideoDeviceInfo } from "@/types/config";
 import { invokeCommand } from "./core";
 
@@ -11,8 +12,14 @@ function saveImage(camera?: string | null) {
   });
 }
 
-function startPreview(camera?: string | null) {
-  return invokeCommand<void>("start_face_preview", { camera: camera ?? null });
+function startPreview(
+  camera: string | null | undefined,
+  frames: Channel<ArrayBuffer>,
+) {
+  return invokeCommand<void>("start_face_preview", {
+    camera: camera ?? null,
+    frames,
+  });
 }
 
 function stopPreview() {
