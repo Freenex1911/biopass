@@ -66,9 +66,9 @@ function App() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3 sm:gap-8">
               <div className="flex items-center gap-3">
-                <img src={logo} className="h-8" alt="Biopass logo" />
+                <img src={logo} className="h-8" alt="BioPass logo" />
                 <span className="font-bold text-lg hidden sm:inline-block">
-                  Biopass
+                  BioPass
                 </span>
                 {version && (
                   <span className="text-xs text-muted-foreground">

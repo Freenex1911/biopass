@@ -6,7 +6,11 @@ Comment={{comment}}
 Exec={{exec}}
 StartupWMClass={{exec}}
 Icon={{icon}}
-Name={{name}}
+Name=BioPass
+GenericName=Biometric authentication
+GenericName[de]=Biometrische Anmeldung
+Keywords=biometrics;authentication;face;fingerprint;login;
+Keywords[de]=Biometrie;Authentifizierung;Gesicht;Fingerabdruck;Anmeldung;
 Terminal=false
 Type=Application
 {{#if mime_type}}

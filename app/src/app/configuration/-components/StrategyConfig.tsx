@@ -241,7 +241,7 @@ export function StrategyConfig() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Comma-separated PAM service names to bypass Biopass. Example:{" "}
+                Comma-separated PAM service names to bypass BioPass. Example:{" "}
                 <code>polkit-1</code>, <code>pkexec</code> or <code>sudo</code>.
               </p>
             </div>
@@ -250,7 +250,7 @@ export function StrategyConfig() {
         <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
           <Label className="text-sm font-semibold">System Sign-in Setup</Label>
           <p className="text-xs text-muted-foreground mt-1 max-w-140">
-            Biopass does not edit PAM configurations automatically. To use it
+            BioPass does not edit PAM configurations automatically. To use it
             for login, unlock, or sudo, configure your PAM stack manually using
             this guide:
           </p>
