@@ -3,18 +3,22 @@
 # ==============================================================================
 
 # ONNX Runtime
-set(ONNXRUNTIME_VERSION "1.19.2")
+set(ONNXRUNTIME_VERSION "1.30.0")
 include(FetchContent)
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
     set(ONNXRUNTIME_ARCH "linux-aarch64")
+    set(ONNXRUNTIME_SHA256 "e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da")
 else()
     set(ONNXRUNTIME_ARCH "linux-x64")
+    set(ONNXRUNTIME_SHA256 "a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd")
 endif()
 
 FetchContent_Declare(
     onnxruntime
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/onnxruntime-${ONNXRUNTIME_VERSION}"
     URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-${ONNXRUNTIME_ARCH}-${ONNXRUNTIME_VERSION}.tgz
+    URL_HASH SHA256=${ONNXRUNTIME_SHA256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(onnxruntime)
@@ -22,7 +26,13 @@ FetchContent_MakeAvailable(onnxruntime)
 set(ONNXRUNTIME_ROOT "${onnxruntime_SOURCE_DIR}")
 set(ONNXRUNTIME_INCLUDE_DIRS "${ONNXRUNTIME_ROOT}/include")
 set(ONNXRUNTIME_LIB_DIR "${ONNXRUNTIME_ROOT}/lib")
-find_library(ONNXRUNTIME_LIB onnxruntime PATHS ${ONNXRUNTIME_LIB_DIR} NO_DEFAULT_PATH)
+set(ONNXRUNTIME_LIB "${ONNXRUNTIME_LIB_DIR}/libonnxruntime.so")
+# Stable packaging paths avoid duplicating the runtime version in Tauri config.
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/onnxruntime-bundle")
+configure_file("${ONNXRUNTIME_LIB_DIR}/libonnxruntime.so.1"
+    "${CMAKE_BINARY_DIR}/onnxruntime-bundle/libonnxruntime.so.1" COPYONLY)
+configure_file("${ONNXRUNTIME_LIB_DIR}/libonnxruntime_providers_shared.so"
+    "${CMAKE_BINARY_DIR}/onnxruntime-bundle/libonnxruntime_providers_shared.so" COPYONLY)
 
 # libturbojpeg (system package via pkg-config; stable soname)
 find_package(PkgConfig REQUIRED)
