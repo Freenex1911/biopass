@@ -1,19 +1,13 @@
 [Desktop Entry]
 Categories=System;
-{{#if comment}}
-Comment={{comment}}
-{{/if}}
-Exec={{exec}}
+Comment=Biometric Authentication System
+Exec=biopass
 StartupWMClass=com.ticklab.biopass
-Icon={{icon}}
+Icon=biopass
 Name=BioPass
 GenericName=Biometric authentication
 GenericName[de]=Biometrische Anmeldung
 Keywords=biometrics;authentication;face;fingerprint;login;
 Keywords[de]=Biometrie;Authentifizierung;Gesicht;Fingerabdruck;Anmeldung;
-NoDisplay=true
 Terminal=false
 Type=Application
-{{#if mime_type}}
-MimeType={{mime_type}}
-{{/if}}

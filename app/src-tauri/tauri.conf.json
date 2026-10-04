@@ -17,12 +17,36 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost data: blob:",
+        "connect-src": "ipc: http://ipc.localhost",
+        "font-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-src": "'none'",
+        "form-action": "'none'"
+      },
       "assetProtocol": {
         "enable": true,
         "scope": ["$HOME/.local/share/com.ticklab.biopass/**", "$DATA/**"]
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost data: blob:",
+        "connect-src": "ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420",
+        "font-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-src": "'none'",
+        "form-action": "'none'"
       }
-    }
+    },
+    "enableGTKAppId": true
   },
   "bundle": {
     "active": true,
@@ -49,11 +73,13 @@
           "/usr/lib/biopass/libbiopass_det.so": "../../auth/build/face/detection/libbiopass_det.so",
           "/usr/lib/biopass/libbiopass_reg.so": "../../auth/build/face/recognition/libbiopass_reg.so",
           "/usr/lib/biopass/libbiopass_as.so": "../../auth/build/face/antispoofing/libbiopass_as.so",
-          "/usr/lib/biopass/libonnxruntime.so.1": "../../auth/build/_deps/onnxruntime-src/lib/libonnxruntime.so.1.19.2",
+          "/usr/lib/biopass/libonnxruntime.so.1": "../../auth/build/onnxruntime-bundle/libonnxruntime.so.1",
           "/usr/lib/biopass/libcamera.so.0.7": "../../auth/build/libcamera-bundle/libcamera.so.0.7",
           "/usr/lib/biopass/libcamera-base.so.0.7": "../../auth/build/libcamera-bundle/libcamera-base.so.0.7",
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
-          "/usr/share/pam-configs/biopass": "scripts/pam.conf"
+          "/usr/share/pam-configs/biopass": "scripts/pam.conf",
+          "/usr/share/applications/com.ticklab.biopass.desktop": "scripts/com.ticklab.biopass.desktop",
+          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so"
         }
       },
       "rpm": {
@@ -71,11 +97,13 @@
           "/usr/lib/biopass/libbiopass_det.so": "../../auth/build/face/detection/libbiopass_det.so",
           "/usr/lib/biopass/libbiopass_reg.so": "../../auth/build/face/recognition/libbiopass_reg.so",
           "/usr/lib/biopass/libbiopass_as.so": "../../auth/build/face/antispoofing/libbiopass_as.so",
-          "/usr/lib/biopass/libonnxruntime.so.1": "../../auth/build/_deps/onnxruntime-src/lib/libonnxruntime.so.1.19.2",
+          "/usr/lib/biopass/libonnxruntime.so.1": "../../auth/build/onnxruntime-bundle/libonnxruntime.so.1",
           "/usr/lib/biopass/libcamera.so.0.7": "../../auth/build/libcamera-bundle/libcamera.so.0.7",
           "/usr/lib/biopass/libcamera-base.so.0.7": "../../auth/build/libcamera-bundle/libcamera-base.so.0.7",
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
-          "/usr/share/pam-configs/biopass": "scripts/pam.conf"
+          "/usr/share/pam-configs/biopass": "scripts/pam.conf",
+          "/usr/share/applications/com.ticklab.biopass.desktop": "scripts/com.ticklab.biopass.desktop",
+          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so"
         }
       }
     }
