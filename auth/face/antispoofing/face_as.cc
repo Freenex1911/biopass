@@ -27,10 +27,12 @@ FaceAntiSpoofing::FaceAntiSpoofing(const std::string& ckpt, int imgsz, const flo
       imgsz(imgsz),
       model_type(model_type),
       session(ckpt, "FaceAntiSpoofing") {
-  // Unrecognized model_type: infer from the checkpoint filename.
-  if (this->model_type != "minifasv2" && this->model_type != "mobilenetv3") {
-    this->model_type =
-        (ckpt.find("mobilenetv3") != std::string::npos) ? "mobilenetv3" : "minifasv2";
+  if (this->model_type == "auto") {
+    const auto shape = session.inputShape();
+    if (shape.size() != 4 || shape[2] != shape[3] || (shape[2] != 80 && shape[2] != 128))
+      throw std::invalid_argument("Unsupported protection model input dimensions");
+    this->imgsz = static_cast<int>(shape[2]);
+    this->model_type = this->imgsz == 80 ? "minifasv2" : "mobilenetv3";
   }
 }
 

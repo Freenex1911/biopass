@@ -1,6 +1,6 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import type { ModelDownloadProgress } from "@/commands/models";
@@ -44,6 +44,25 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
   const [filePath, setFilePath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
+  const activeRequest = useRef<string | null>(null);
+  const cancelled = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(
+    () => () => {
+      cancelled.current = true;
+      if (activeRequest.current)
+        void cmd.models.cancelDownload(activeRequest.current);
+    },
+    [],
+  );
+
+  async function cancelDownload() {
+    cancelled.current = true;
+    setCancelling(true);
+    if (activeRequest.current)
+      await cmd.models.cancelDownload(activeRequest.current);
+  }
 
   function reset() {
     setName("");
@@ -82,15 +101,23 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
       return;
     }
 
+    cancelled.current = false;
+    setCancelling(false);
     setSubmitting(true);
     let unlisten: (() => void) | undefined;
     try {
       if (source === "url") {
-        unlisten = await cmd.models.onDownloadProgress((p) => setProgress(p));
+        const requestId = crypto.randomUUID();
+        activeRequest.current = requestId;
+        unlisten = await cmd.models.onDownloadProgress((p) => {
+          if (p.id === requestId) setProgress(p);
+        });
+        if (cancelled.current) return;
         const model = await cmd.models.addFromUrl(
           name.trim(),
           modelType,
           url.trim(),
+          requestId,
         );
         toast.success("Model added");
         onAdded(model);
@@ -106,8 +133,12 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
       setOpen(false);
       reset();
     } catch (err) {
-      toast.error(`Failed to add model: ${err}`);
+      if (String(err).includes("Download cancelled"))
+        toast.info("Download cancelled");
+      else toast.error(`Failed to add model: ${err}`);
     } finally {
+      activeRequest.current = null;
+      setCancelling(false);
       unlisten?.();
       setSubmitting(false);
       setProgress(null);
@@ -241,6 +272,21 @@ export function AddModelDialog({ onAdded }: AddModelDialogProps) {
         </div>
 
         <DialogFooter>
+          {submitting && source === "url" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cancelling}
+              onClick={() =>
+                void cancelDownload().catch((err) => {
+                  toast.error(`Could not cancel download: ${err}`);
+                  setCancelling(false);
+                })
+              }
+            >
+              {cancelling ? "Cancelling…" : "Cancel download"}
+            </Button>
+          )}
           <Button type="button" onClick={handleSubmit} disabled={submitting}>
             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {submitting ? "Adding..." : "Add model"}

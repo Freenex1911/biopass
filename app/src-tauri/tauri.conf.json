@@ -79,7 +79,9 @@
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
           "/usr/share/pam-configs/biopass": "scripts/pam.conf",
           "/usr/share/applications/com.ticklab.biopass.desktop": "scripts/com.ticklab.biopass.desktop",
-          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so"
+          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so",
+          "/usr/share/doc/biopass/opencv-LICENSE": "../../auth/build/opencv-LICENSE",
+          "/usr/share/doc/biopass/libyuv-LICENSE": "../../auth/build/libyuv-LICENSE"
         }
       },
       "rpm": {
@@ -103,7 +105,9 @@
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
           "/usr/share/pam-configs/biopass": "scripts/pam.conf",
           "/usr/share/applications/com.ticklab.biopass.desktop": "scripts/com.ticklab.biopass.desktop",
-          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so"
+          "/usr/lib/biopass/libonnxruntime_providers_shared.so": "../../auth/build/onnxruntime-bundle/libonnxruntime_providers_shared.so",
+          "/usr/share/doc/biopass/opencv-LICENSE": "../../auth/build/opencv-LICENSE",
+          "/usr/share/doc/biopass/libyuv-LICENSE": "../../auth/build/libyuv-LICENSE"
         }
       }
     }

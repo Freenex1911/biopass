@@ -57,12 +57,12 @@ The model and its license are installed under
 `/usr/share/com.ticklab.biopass/models`; the model is an internal preprocessing
 resource, not a selectable recognition/detection model in the user's registry.
 The download revision and SHA-256 are pinned in `face/alignment/CMakeLists.txt`.
-It adds no OpenCV runtime dependency. Eigen is a build-time header dependency;
+OpenCV image processing is linked statically. Eigen is a build-time header dependency;
 its license is included in the package.
 
 ## Preview lifecycle
 
-Preview and capture commands run on blocking workers rather than the UI dispatch thread. Helper startup and photo capture responses have a 10-second deadline; a frame response has a 5-second deadline. Protocol headers are limited to 1024 bytes and frames to 8 MiB. The deadline covers the complete response, not just each individual read.
+Preview and capture use Tokio asynchronous processes and bounded channels. One session task owns the helper and serializes frame and capture requests. JPEG frames reach the frontend as binary Tauri channel responses; the frontend releases replaced and stopped preview Blob URLs. Helper startup and photo capture responses have a 10-second deadline; a frame response has a 5-second deadline. Protocol headers are limited to 1024 bytes and frames to 8 MiB. The deadline covers the complete response, not just each individual read.
 
 A failed preview releases its helper and reports an error to the UI. A restart discards an ended session. Stopping or exiting the application terminates the helper before waiting for the frame reader, so a stalled read cannot prevent camera cleanup. The kernel also terminates the preview helper if its application parent crashes.
 
@@ -71,3 +71,11 @@ A failed preview releases its helper and reports an error to the UI. A restart d
 The fixtures in `tests/config-contract` are read by C++, Rust and frontend tests. They cover legacy camera settings, color-only priority selection, fixed IR selection and the optional GNOME preference. Rust tests also cover bounded protocol reads and child cleanup. C++ tests exercise helper exits, timeout escalation, cancellation, retry cleanup and equivalent direct/cached ONNX comparisons.
 
 Run native checks with `BUILD_TESTS=ON` and `ctest --test-dir auth/build --output-on-failure`. The embedding test needs the actual ONNX model, not a Git LFS pointer. Use `git lfs pull` or configure `BIOPASS_TEST_MODEL_DIR` to a directory containing `edgeface_s_gamma_05.onnx`. Frontend checks use `bun test`; Rust checks use `cargo test --lib` from `app/src-tauri`.
+
+## Model imports
+
+URL downloads allow HTTP and HTTPS, with a 10-second connection timeout, a 30-second read timeout and a five-minute request deadline. Downloads and file imports are limited to 512 MiB. A user can cancel an active download; temporary files are removed on failure or cancellation.
+
+Before publication, the native helper loads the ONNX model, checks its input/output contract for the selected model type and runs an inference with finite output. Validation has a 30-second deadline. Publication uses a SQLite transaction and refuses to overwrite an existing file; a failed registry update removes the newly published file. Download progress is scoped to its request.
+
+Configuration uses serde-saphyr for YAML, retaining legacy settings and unknown configuration keys. Native image resizing, borders and affine warping use statically linked OpenCV; libyuv converts YUYV camera frames. Dependency revisions and downloaded archive hashes are pinned in `auth/Dependencies.cmake`.

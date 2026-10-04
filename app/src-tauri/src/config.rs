@@ -205,7 +205,7 @@ fn get_default_config() -> BiopassConfig {
 /// schema_version that doesn't match CURRENT_SCHEMA_VERSION -- mirrors the
 /// defaults+warn fallback in auth/core/auth_config.cc's readConfig().
 fn parse_config(content: &str) -> BiopassConfig {
-    match serde_yaml::from_str::<BiopassConfig>(content) {
+    match serde_saphyr::from_str::<BiopassConfig>(content) {
         Ok(config) if config.schema_version == CURRENT_SCHEMA_VERSION => config,
         Ok(config) => {
             eprintln!(
@@ -241,7 +241,7 @@ pub fn load_config(app: AppHandle) -> Result<BiopassConfig, String> {
 // Appearance is controlled by the global menu, not by the sign-in form. Keep
 // its latest saved value when an older form snapshot is submitted.
 fn preserve_appearance(config: &mut BiopassConfig, saved: &str) {
-    if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(saved) {
+    if let Ok(value) = serde_saphyr::from_str::<serde_json::Value>(saved) {
         if let Some(appearance) = value.get("appearance").and_then(|v| v.as_str()) {
             if matches!(appearance, "system" | "light" | "dark") {
                 config.appearance = appearance.to_string();
@@ -254,16 +254,16 @@ fn appearance_yaml(saved: &str, appearance: &str) -> Result<String, String> {
     if !matches!(appearance, "system" | "light" | "dark") {
         return Err("Invalid appearance preference".into());
     }
-    let mut value: serde_yaml::Value =
-        serde_yaml::from_str(saved).map_err(|e| format!("Failed to read settings: {e}"))?;
+    let mut value: serde_json::Value =
+        serde_saphyr::from_str(saved).map_err(|e| format!("Failed to read settings: {e}"))?;
     let map = value
-        .as_mapping_mut()
+        .as_object_mut()
         .ok_or("Settings must be a YAML mapping")?;
     map.insert(
-        serde_yaml::Value::String("appearance".into()),
-        serde_yaml::Value::String(appearance.into()),
+        "appearance".into(),
+        serde_json::Value::String(appearance.into()),
     );
-    serde_yaml::to_string(&value).map_err(|e| format!("Failed to serialize settings: {e}"))
+    serde_saphyr::to_string(&value).map_err(|e| format!("Failed to serialize settings: {e}"))
 }
 
 #[tauri::command]
@@ -273,7 +273,7 @@ pub fn save_appearance(app: AppHandle, appearance: String) -> Result<(), String>
     let saved = if path.exists() {
         fs::read_to_string(path).map_err(|e| format!("Failed to read settings: {e}"))?
     } else {
-        serde_yaml::to_string(&get_default_config()).map_err(|e| e.to_string())?
+        serde_saphyr::to_string(&get_default_config()).map_err(|e| e.to_string())?
     };
     write_config(&app, &appearance_yaml(&saved, &appearance)?)
 }
@@ -289,7 +289,7 @@ pub fn save_config(app: AppHandle, mut config: BiopassConfig) -> Result<(), Stri
         preserve_appearance(&mut config, &saved);
     }
     let content =
-        serde_yaml::to_string(&config).map_err(|e| format!("Failed to serialize config: {e}"))?;
+        serde_saphyr::to_string(&config).map_err(|e| format!("Failed to serialize config: {e}"))?;
     write_config(&app, &content)
 }
 
@@ -370,7 +370,7 @@ mod tests {
             assert_eq!(serde_json::to_value(&actual).unwrap(), expected);
             validate_camera_selection(&actual.methods.face.camera_selection).unwrap();
             assert_eq!(
-                parse_config(&serde_yaml::to_string(&actual).unwrap()),
+                parse_config(&serde_saphyr::to_string(&actual).unwrap()),
                 actual
             );
         }
@@ -381,9 +381,9 @@ mod tests {
         let saved =
             "appearance: dark\nfuture_setting: {enabled: true}\nmethods: {face: {enable: true}}\n";
         let updated = appearance_yaml(saved, "system").unwrap();
-        let mut before: serde_yaml::Value = serde_yaml::from_str(saved).unwrap();
-        let after: serde_yaml::Value = serde_yaml::from_str(&updated).unwrap();
-        before["appearance"] = serde_yaml::Value::String("system".into());
+        let mut before: serde_json::Value = serde_saphyr::from_str(saved).unwrap();
+        let after: serde_json::Value = serde_saphyr::from_str(&updated).unwrap();
+        before["appearance"] = serde_json::Value::String("system".into());
         assert_eq!(before, after);
         assert!(appearance_yaml(saved, "unexpected").is_err());
         assert!(appearance_yaml("[invalid, root]", "system").is_err());
@@ -424,7 +424,7 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("camera_selection");
-        let loaded = parse_config(&serde_yaml::to_string(&value).unwrap());
+        let loaded = parse_config(&serde_saphyr::to_string(&value).unwrap());
         assert_eq!(loaded, config);
     }
 
@@ -442,7 +442,7 @@ mod tests {
             }],
         };
         assert_eq!(
-            parse_config(&serde_yaml::to_string(&config).unwrap()),
+            parse_config(&serde_saphyr::to_string(&config).unwrap()),
             config
         );
     }

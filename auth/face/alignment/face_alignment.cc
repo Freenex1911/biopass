@@ -59,31 +59,12 @@ std::optional<ImageRGB> alignFaceLandmarks(const ImageRGB& image, const FaceLand
   }
   if (std::sqrt(error / 5.) > 10.)
     return std::nullopt;
-  const Eigen::Matrix3d inverse = transform.inverse();
   ImageRGB output(112, 112);
-  // Bilinear sampling with black padding, consistent with existing RGB
-  // image utilities. Geometry is independent of the selected recognizer.
-  for (int y = 0; y < 112; ++y) {
-    for (int x = 0; x < 112; ++x) {
-      const Eigen::Vector3d point = inverse * Eigen::Vector3d(x, y, 1.);
-      if (!point.allFinite() || point.x() < -1. || point.y() < -1. || point.x() >= image.width ||
-          point.y() >= image.height)
-        continue;
-      const int sx = static_cast<int>(std::floor(point.x()));
-      const int sy = static_cast<int>(std::floor(point.y()));
-      const double fx = point.x() - sx, fy = point.y() - sy;
-      for (int c = 0; c < 3; ++c) {
-        double value = 0.;
-        for (int dy = 0; dy < 2; ++dy) {
-          for (int dx = 0; dx < 2; ++dx) {
-            if (sx + dx >= 0 && sx + dx < image.width && sy + dy >= 0 && sy + dy < image.height)
-              value += image.at(sy + dy, sx + dx, c) * (dx ? fx : 1. - fx) * (dy ? fy : 1. - fy);
-          }
-        }
-        output.at(y, x, c) = static_cast<uint8_t>(std::clamp(std::round(value), 0., 255.));
-      }
-    }
-  }
+  cv::Matx23d affine(transform(0, 0), transform(0, 1), transform(0, 2), transform(1, 0),
+                     transform(1, 1), transform(1, 2));
+  auto destination = imageMat(output);
+  cv::warpAffine(imageMat(image), destination, affine, cv::Size(112, 112), cv::INTER_LINEAR,
+                 cv::BORDER_CONSTANT, cv::Scalar::all(0));
   return output;
 }
 

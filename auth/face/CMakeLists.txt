@@ -7,6 +7,8 @@ add_library(biopass_stb STATIC
     stb_impl.cc
 )
 set_target_properties(biopass_stb PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(biopass_stb PUBLIC opencv_core opencv_imgproc)
+target_include_directories(biopass_stb SYSTEM PUBLIC ${opencv_SOURCE_DIR}/modules/core/include ${opencv_SOURCE_DIR}/modules/imgproc/include ${CMAKE_BINARY_DIR})
 target_include_directories(biopass_stb PUBLIC
     ${STB_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -21,9 +23,12 @@ set_target_properties(biopass_onnx PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(biopass_onnx PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/common
     ${ONNXRUNTIME_INCLUDE_DIRS}
+    ${opencv_SOURCE_DIR}/modules/core/include
+    ${CMAKE_BINARY_DIR}
 )
 target_link_libraries(biopass_onnx PUBLIC
     ${ONNXRUNTIME_LIB}
+    opencv_core
 )
 
 # Shared face utilities (camera capture, debug image I/O).
@@ -40,6 +45,7 @@ target_include_directories(biopass_face_common PUBLIC
 )
 target_link_libraries(biopass_face_common
     biopass_stb
+    yuv
     biopass_core
     libcamera_bundled
     PkgConfig::TURBOJPEG

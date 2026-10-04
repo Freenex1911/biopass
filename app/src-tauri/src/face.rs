@@ -6,7 +6,7 @@ use crate::db;
 use crate::paths::get_faces_dir;
 
 #[tauri::command]
-pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, String> {
+pub async fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, String> {
     let faces_dir = get_faces_dir(&app)?;
     let app_config: BiopassConfig = load_config(app.clone())?;
 
@@ -27,15 +27,7 @@ pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, St
     let detect_model = db::resolve_model_path(&conn, model_id)?
         .ok_or_else(|| format!("Detection model '{}' not found in registry", model_id))?;
 
-    let helper_bin = if std::path::Path::new("/usr/bin/biopass-helper").exists() {
-        "/usr/bin/biopass-helper".to_string()
-    } else if std::path::Path::new("../../auth/build/pam/biopass-helper").exists() {
-        "../../auth/build/pam/biopass-helper".to_string()
-    } else {
-        "biopass-helper".to_string()
-    };
-
-    let mut cmd_builder = std::process::Command::new(&helper_bin);
+    let mut cmd_builder = tokio::process::Command::new(crate::face_session::helper_path());
     cmd_builder
         .arg("capture-face")
         .arg("--output")
@@ -49,9 +41,7 @@ pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, St
 
     cmd_builder.arg("--align-faces");
 
-    let output = cmd_builder
-        .output()
-        .map_err(|e| format!("Failed to execute helper: {}", e))?;
+    let output = crate::helper_io::output(cmd_builder, std::time::Duration::from_secs(15)).await?;
 
     if output.status.success() {
         Ok(file_path.to_string_lossy().to_string())

@@ -1,4 +1,4 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Camera, Circle, Square, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,6 +17,30 @@ export function FaceCapture({
   const [capturing, setCapturing] = useState(false);
   const runningCamera = useRef<string | null | undefined>(undefined);
   const [faceImages, setFaceImages] = useState<string[]>([]);
+  const previewUrl = useRef<string | null>(null);
+  const previewChannel = useRef<Channel<ArrayBuffer> | null>(null);
+
+  function clearFrame() {
+    previewChannel.current = null;
+    if (previewRef.current) previewRef.current.removeAttribute("src");
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = null;
+  }
+
+  function createFrameChannel() {
+    const channel = new Channel<ArrayBuffer>();
+    previewChannel.current = channel;
+    channel.onmessage = (bytes) => {
+      if (previewChannel.current !== channel || !previewRef.current) return;
+      const url = URL.createObjectURL(
+        new Blob([bytes], { type: "image/jpeg" }),
+      );
+      previewRef.current.src = url;
+      if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+      previewUrl.current = url;
+    };
+    return channel;
+  }
 
   const loadFaceImages = useCallback(async () => {
     try {
@@ -33,24 +57,12 @@ export function FaceCapture({
 
   // Subscribe before starting the helper so an immediate failure is not lost.
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
     let unlistenError: UnlistenFn | undefined;
     let cancelled = false;
 
-    listen<string>("face-preview-frame", (event) => {
-      if (previewRef.current) {
-        previewRef.current.src = `data:image/jpeg;base64,${event.payload}`;
-      }
-    }).then((u) => {
-      if (cancelled) {
-        u();
-      } else {
-        unlisten = u;
-      }
-    });
-
     listen<string>("face-preview-error", (event) => {
       setCapturing(false);
+      clearFrame();
       toast.error(event.payload);
       void cmd.face.stopPreview().catch(() => {});
     }).then((u) => {
@@ -60,7 +72,6 @@ export function FaceCapture({
 
     return () => {
       cancelled = true;
-      unlisten?.();
       unlistenError?.();
     };
   }, []);
@@ -68,6 +79,7 @@ export function FaceCapture({
   // Make sure the helper process is torn down on unmount.
   useEffect(() => {
     return () => {
+      clearFrame();
       cmd.face.stopPreview().catch(() => {});
     };
   }, []);
@@ -84,7 +96,7 @@ export function FaceCapture({
           setCapturing(false);
           return;
         }
-        await cmd.face.startPreview(camera);
+        await cmd.face.startPreview(camera, createFrameChannel());
         runningCamera.current = camera;
       } catch (err) {
         if (alive) {
@@ -101,7 +113,7 @@ export function FaceCapture({
   async function startCamera() {
     if (!available) return;
     try {
-      await cmd.face.startPreview(camera);
+      await cmd.face.startPreview(camera, createFrameChannel());
       runningCamera.current = camera;
       setCapturing(true);
     } catch (err) {
@@ -117,9 +129,7 @@ export function FaceCapture({
       console.error("stopPreview failed:", err);
     }
     setCapturing(false);
-    if (previewRef.current) {
-      previewRef.current.removeAttribute("src");
-    }
+    clearFrame();
   }
 
   async function capturePhoto() {
