@@ -22,7 +22,7 @@ export function selectAvailableCameraPair(
   return candidates.find((pair) => {
     const camera =
       pair.camera === "auto"
-        ? devices[0]
+        ? devices.find((device) => !device.infrared)
         : devices.find((device) => cameraMatches(device, pair.camera));
     const ir = devices.find((device) => cameraMatches(device, pair.ir_camera));
     return (

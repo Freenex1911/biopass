@@ -1,14 +1,22 @@
 #include "camera_capture.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <libcamera/libcamera.h>
+#include <linux/videodev2.h>
+#include <poll.h>
 #include <spdlog/spdlog.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -29,6 +37,13 @@ namespace {
 
 constexpr int kDefaultWarmupFrames = 5;
 constexpr int kDefaultCaptureTimeoutMs = 10000;
+constexpr const char* kCameraIdPrefix = "libcamera:";
+// Selector suffix for an IR stream that shares its libcamera camera with the
+// color stream (e.g. Logitech BRIO), see irStreamPath().
+constexpr const char* kIrStreamSuffix = "/ir";
+// Pulsed emitters alternate lit and unlit frames; pick the best exposed one.
+constexpr int kIrCandidateFrames = 4;
+constexpr int kV4l2BufferCount = 4;
 
 std::string device_label(const std::optional<std::string>& linux_video_device_path) {
   return linux_video_device_path.has_value() ? *linux_video_device_path : std::string("<default>");
@@ -174,6 +189,120 @@ std::vector<std::string> videoPathsForCamera(const libcamera::Camera& camera) {
   closedir(dir);
   std::sort(paths.begin(), paths.end());
   return paths;
+}
+
+int xioctl(int fd, unsigned long request, void* arg) {
+  int result;
+  do {
+    result = ioctl(fd, request, arg);
+  } while (result == -1 && errno == EINTR);
+  return result;
+}
+
+struct V4l2NodeInfo {
+  bool capture = false;
+  bool grey = false;
+};
+
+V4l2NodeInfo probeV4l2Node(const std::string& path) {
+  V4l2NodeInfo info;
+  const int fd = ::open(path.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
+  if (fd < 0) {
+    return info;
+  }
+  v4l2_capability cap{};
+  if (xioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
+    const uint32_t caps =
+        (cap.capabilities & V4L2_CAP_DEVICE_CAPS) ? cap.device_caps : cap.capabilities;
+    info.capture = (caps & V4L2_CAP_VIDEO_CAPTURE) && (caps & V4L2_CAP_STREAMING);
+  }
+  if (info.capture) {
+    v4l2_fmtdesc desc{};
+    desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    for (desc.index = 0; xioctl(fd, VIDIOC_ENUM_FMT, &desc) == 0; ++desc.index) {
+      if (desc.pixelformat == V4L2_PIX_FMT_GREY) {
+        info.grey = true;
+        break;
+      }
+    }
+  }
+  ::close(fd);
+  return info;
+}
+
+// libcamera's UVC pipeline streams only from the camera's default video node.
+// Some webcams (e.g. Logitech BRIO) expose their IR sensor as a second GREY
+// capture node of the same USB function, which libcamera reports under the
+// same camera but never streams. Returns that node, if any. A camera whose
+// only capture node is GREY (a standalone IR camera) has no such stream.
+std::optional<std::string> irStreamPath(const libcamera::Camera& camera) {
+  std::optional<std::string> grey_node;
+  bool has_color_node = false;
+  for (const auto& path : videoPathsForCamera(camera)) {
+    const auto info = probeV4l2Node(path);
+    if (!info.capture) {
+      continue;
+    }
+    if (info.grey) {
+      if (!grey_node) {
+        grey_node = path;
+      }
+    } else {
+      has_color_node = true;
+    }
+  }
+  if (!has_color_node) {
+    return std::nullopt;
+  }
+  return grey_node;
+}
+
+bool hasSuffix(const std::string& value, const std::string& suffix) {
+  return value.size() >= suffix.size() &&
+         value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// A selector naming a shared-camera IR stream, resolved to its video node.
+struct IrStreamTarget {
+  std::string camera_id;
+  std::string path;
+};
+
+std::optional<IrStreamTarget> findIrStream(libcamera::CameraManager& manager,
+                                           const std::optional<std::string>& selector) {
+  if (!selector.has_value()) {
+    return std::nullopt;
+  }
+  std::shared_ptr<libcamera::Camera> camera;
+  if (selector->rfind(kCameraIdPrefix, 0) == 0) {
+    if (!hasSuffix(*selector, kIrStreamSuffix)) {
+      return std::nullopt;
+    }
+    const std::string id = selector->substr(
+        std::strlen(kCameraIdPrefix),
+        selector->size() - std::strlen(kCameraIdPrefix) - std::strlen(kIrStreamSuffix));
+    camera = manager.get(id);
+    if (!camera) {
+      return std::nullopt;
+    }
+    if (auto path = irStreamPath(*camera)) {
+      return IrStreamTarget{camera->id(), *path};
+    }
+    return std::nullopt;
+  }
+
+  // A plain /dev/video* path that is a camera's secondary IR node. Without
+  // this, findCameraByPath() would map it to the same camera and silently
+  // capture the color stream instead.
+  camera = findCameraByPath(manager, *selector);
+  if (!camera) {
+    return std::nullopt;
+  }
+  const auto path = irStreamPath(*camera);
+  if (!path || *path != *selector) {
+    return std::nullopt;
+  }
+  return IrStreamTarget{camera->id(), *path};
 }
 
 bool isSupportedPixelFormat(const libcamera::PixelFormat& format) {
@@ -583,6 +712,291 @@ class LibcameraCaptureSession : public ICameraCaptureSession {
   bool started_ = false;
 };
 
+// Streams a GREY video node directly through V4L2, for IR streams libcamera
+// does not capture (see irStreamPath()). Only used for IR sessions.
+class V4l2GreyCaptureSession : public ICameraCaptureSession {
+ public:
+  static std::unique_ptr<V4l2GreyCaptureSession> open(const std::string& path,
+                                                      std::string camera_label, int warmup_frames,
+                                                      int capture_timeout_ms) {
+    auto session = std::unique_ptr<V4l2GreyCaptureSession>(
+        new V4l2GreyCaptureSession(std::move(camera_label), warmup_frames, capture_timeout_ms));
+    if (!session->setup(path)) {
+      return nullptr;
+    }
+    return session;
+  }
+
+  ~V4l2GreyCaptureSession() override { close(); }
+
+  bool isOpen() const override { return started_; }
+
+  ImageRGB capture() override {
+    if (!isOpen()) {
+      return {};
+    }
+
+    const bool has_timeout = capture_timeout_ms_ > 0;
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(std::max(0, capture_timeout_ms_));
+
+    // Drop frames that completed before this call so a long-idle session
+    // never returns a stale frame.
+    while (dequeue(nullptr)) {
+    }
+
+    for (int i = 0; i < warmup_frames_; ++i) {
+      if (!waitForFrame(deadline, has_timeout, nullptr)) {
+        return {};
+      }
+    }
+
+    std::vector<uint8_t> best;
+    double best_score = 0.0;
+    for (int i = 0; i < kIrCandidateFrames; ++i) {
+      std::vector<uint8_t> frame;
+      if (!waitForFrame(deadline, has_timeout, &frame)) {
+        return {};
+      }
+      if (frame.empty()) {
+        continue;
+      }
+      const double score = exposureScore(frame);
+      if (best.empty() || score < best_score) {
+        best = std::move(frame);
+        best_score = score;
+      }
+    }
+
+    ImageRGB image;
+    if (!best.empty()) {
+      stretchContrast(best);
+    }
+    if (best.empty() || !greyToRgb(best.data(), best.size(), width_, height_, width_, image)) {
+      spdlog::error("FaceAuth: Failed to convert frame from '{}'", camera_label_);
+      return {};
+    }
+    return image;
+  }
+
+ private:
+  V4l2GreyCaptureSession(std::string camera_label, int warmup_frames, int capture_timeout_ms)
+      : camera_label_(std::move(camera_label)),
+        warmup_frames_(std::max(0, warmup_frames)),
+        capture_timeout_ms_(capture_timeout_ms) {}
+
+  bool setup(const std::string& path) {
+    fd_ = ::open(path.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
+    if (fd_ < 0) {
+      spdlog::error("FaceAuth: Failed to open IR stream '{}': {}", camera_label_,
+                    std::strerror(errno));
+      return false;
+    }
+
+    v4l2_format format{};
+    format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (xioctl(fd_, VIDIOC_G_FMT, &format) != 0) {
+      spdlog::error("FaceAuth: Failed to query format of IR stream '{}'", camera_label_);
+      return false;
+    }
+    format.fmt.pix.pixelformat = V4L2_PIX_FMT_GREY;
+    format.fmt.pix.field = V4L2_FIELD_NONE;
+    if (xioctl(fd_, VIDIOC_S_FMT, &format) != 0 ||
+        format.fmt.pix.pixelformat != V4L2_PIX_FMT_GREY) {
+      spdlog::error("FaceAuth: IR stream '{}' rejected the GREY format", camera_label_);
+      return false;
+    }
+    width_ = static_cast<int>(format.fmt.pix.width);
+    height_ = static_cast<int>(format.fmt.pix.height);
+    stride_ = static_cast<int>(format.fmt.pix.bytesperline);
+    if (stride_ < width_) {
+      stride_ = width_;
+    }
+
+    v4l2_requestbuffers request{};
+    request.count = kV4l2BufferCount;
+    request.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    request.memory = V4L2_MEMORY_MMAP;
+    if (xioctl(fd_, VIDIOC_REQBUFS, &request) != 0 || request.count == 0) {
+      spdlog::error("FaceAuth: Failed to allocate buffers for '{}'", camera_label_);
+      return false;
+    }
+    requested_buffers_ = true;
+
+    for (uint32_t index = 0; index < request.count; ++index) {
+      v4l2_buffer buffer{};
+      buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+      buffer.memory = V4L2_MEMORY_MMAP;
+      buffer.index = index;
+      if (xioctl(fd_, VIDIOC_QUERYBUF, &buffer) != 0) {
+        spdlog::error("FaceAuth: Failed to query buffer for '{}'", camera_label_);
+        return false;
+      }
+      void* mapping = mmap(nullptr, buffer.length, PROT_READ, MAP_SHARED, fd_, buffer.m.offset);
+      if (mapping == MAP_FAILED) {
+        spdlog::error("FaceAuth: Failed to mmap buffer for '{}'", camera_label_);
+        return false;
+      }
+      buffers_.push_back(Mapping{mapping, buffer.length});
+      if (xioctl(fd_, VIDIOC_QBUF, &buffer) != 0) {
+        spdlog::error("FaceAuth: Failed to queue initial buffer for '{}'", camera_label_);
+        return false;
+      }
+    }
+
+    v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (xioctl(fd_, VIDIOC_STREAMON, &type) != 0) {
+      spdlog::error("FaceAuth: Failed to start IR stream '{}': {}", camera_label_,
+                    std::strerror(errno));
+      return false;
+    }
+    started_ = true;
+    return true;
+  }
+
+  // Waits for the next frame. With `out`, copies its tightly packed grey
+  // pixels (left empty for a corrupt frame); otherwise the frame is discarded.
+  bool waitForFrame(std::chrono::steady_clock::time_point deadline, bool has_timeout,
+                    std::vector<uint8_t>* out) {
+    while (true) {
+      int timeout_ms = -1;
+      if (has_timeout) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+        timeout_ms = static_cast<int>(std::max<int64_t>(0, remaining.count()));
+      }
+      pollfd poll_fd{fd_, POLLIN, 0};
+      const int ready = ::poll(&poll_fd, 1, timeout_ms);
+      if (ready < 0 && errno == EINTR) {
+        continue;
+      }
+      if (ready <= 0) {
+        spdlog::error("FaceAuth: Timed out waiting for frame from '{}'", camera_label_);
+        close();
+        return false;
+      }
+      if (dequeue(out)) {
+        return true;
+      }
+      if (!started_) {
+        return false;
+      }
+    }
+  }
+
+  // Dequeues one completed buffer, optionally copying it, and requeues it.
+  // Returns false when no buffer is ready (or on a stream error).
+  bool dequeue(std::vector<uint8_t>* out) {
+    v4l2_buffer buffer{};
+    buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buffer.memory = V4L2_MEMORY_MMAP;
+    if (xioctl(fd_, VIDIOC_DQBUF, &buffer) != 0) {
+      if (errno != EAGAIN) {
+        spdlog::error("FaceAuth: Failed to dequeue frame from '{}': {}", camera_label_,
+                      std::strerror(errno));
+        close();
+      }
+      return false;
+    }
+    if (out) {
+      out->clear();
+      const size_t needed = static_cast<size_t>(stride_) * (height_ - 1) + width_;
+      if (buffer.index < buffers_.size() && !(buffer.flags & V4L2_BUF_FLAG_ERROR) &&
+          buffer.bytesused >= needed) {
+        const auto* data = static_cast<const uint8_t*>(buffers_[buffer.index].base);
+        out->resize(static_cast<size_t>(width_) * height_);
+        for (int y = 0; y < height_; ++y) {
+          std::memcpy(out->data() + static_cast<size_t>(y) * width_,
+                      data + static_cast<size_t>(y) * stride_, width_);
+        }
+      }
+    }
+    xioctl(fd_, VIDIOC_QBUF, &buffer);
+    return true;
+  }
+
+  // Distance of the mean from mid-grey plus a penalty for clipped pixels, so
+  // an over-exposed lit frame and a dark unlit frame both lose to a usable one.
+  static double exposureScore(const std::vector<uint8_t>& pixels) {
+    uint64_t sum = 0;
+    uint64_t clipped = 0;
+    for (const uint8_t value : pixels) {
+      sum += value;
+      clipped += value >= 250;
+    }
+    const double count = static_cast<double>(pixels.size());
+    return std::abs(sum / count - 128.0) + 255.0 * (clipped / count);
+  }
+
+  // Stretches the 1st..99th percentile to the full range. Without an active
+  // color stream the camera's shared auto-exposure leaves IR frames too dark
+  // for face detection.
+  static void stretchContrast(std::vector<uint8_t>& pixels) {
+    std::array<size_t, 256> histogram{};
+    for (const uint8_t value : pixels) {
+      ++histogram[value];
+    }
+    const size_t tail = pixels.size() / 100;
+    int low = 0;
+    for (size_t seen = 0; low < 255 && (seen += histogram[low]) <= tail; ++low) {
+    }
+    int high = 255;
+    for (size_t seen = 0; high > 0 && (seen += histogram[high]) <= tail; --high) {
+    }
+    // Leave flat (e.g. fully dark) frames alone instead of amplifying noise.
+    if (high - low < 16) {
+      return;
+    }
+    std::array<uint8_t, 256> lut{};
+    for (int value = 0; value < 256; ++value) {
+      lut[value] = static_cast<uint8_t>(std::clamp((value - low) * 255 / (high - low), 0, 255));
+    }
+    for (uint8_t& value : pixels) {
+      value = lut[value];
+    }
+  }
+
+  void close() {
+    if (fd_ < 0) {
+      return;
+    }
+    if (started_) {
+      v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+      xioctl(fd_, VIDIOC_STREAMOFF, &type);
+      started_ = false;
+    }
+    for (const auto& mapping : buffers_) {
+      munmap(mapping.base, mapping.length);
+    }
+    buffers_.clear();
+    if (requested_buffers_) {
+      v4l2_requestbuffers request{};
+      request.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+      request.memory = V4L2_MEMORY_MMAP;
+      xioctl(fd_, VIDIOC_REQBUFS, &request);
+      requested_buffers_ = false;
+    }
+    ::close(fd_);
+    fd_ = -1;
+  }
+
+  struct Mapping {
+    void* base = nullptr;
+    size_t length = 0;
+  };
+
+  std::string camera_label_;
+  int warmup_frames_ = 0;
+  int capture_timeout_ms_ = 0;
+  int fd_ = -1;
+  int width_ = 0;
+  int height_ = 0;
+  int stride_ = 0;
+  std::vector<Mapping> buffers_;
+  bool requested_buffers_ = false;
+  bool started_ = false;
+};
+
 }  // namespace
 
 bool checkCameraAvailability(const std::optional<std::string>& linux_video_device_path) {
@@ -594,6 +1008,9 @@ std::optional<std::string> resolveCameraSelector(const std::string& selector) {
   auto manager = cameraManager();
   if (!manager || selector.empty())
     return std::nullopt;
+  if (auto ir_stream = findIrStream(*manager, selector)) {
+    return kCameraIdPrefix + ir_stream->camera_id + kIrStreamSuffix;
+  }
   auto camera = findCamera(*manager, selector);
   if (!camera)
     return std::nullopt;
@@ -606,6 +1023,16 @@ std::unique_ptr<ICameraCaptureSession> openCameraSession(
   auto manager = cameraManager();
   if (!manager) {
     return nullptr;
+  }
+
+  if (auto ir_stream = findIrStream(*manager, linux_video_device_path)) {
+    if (format != CameraCaptureFormat::V4L2Grey) {
+      spdlog::error("FaceAuth: '{}' is an IR stream and cannot be used as color camera",
+                    device_label(linux_video_device_path));
+      return nullptr;
+    }
+    return V4l2GreyCaptureSession::open(ir_stream->path, device_label(linux_video_device_path),
+                                        warmup_frames, capture_timeout_ms);
   }
 
   auto camera = findCamera(*manager, linux_video_device_path);
@@ -658,7 +1085,20 @@ std::vector<CameraDeviceInfo> listCameraDevices() {
     const auto model = camera->properties().get(libcamera::properties::Model);
     info.model = model ? std::string(*model) : info.id;
     info.video_paths = videoPathsForCamera(*camera);
+    const auto ir_path = irStreamPath(*camera);
+    if (ir_path) {
+      info.video_paths.erase(
+          std::remove(info.video_paths.begin(), info.video_paths.end(), *ir_path),
+          info.video_paths.end());
+    }
+    CameraDeviceInfo ir_info{info.id + kIrStreamSuffix, info.model, {}, true};
     result.push_back(std::move(info));
+    // Shared-camera IR streams are listed as their own camera so they can be
+    // selected independently of the color stream.
+    if (ir_path) {
+      ir_info.video_paths = {*ir_path};
+      result.push_back(std::move(ir_info));
+    }
   }
   return result;
 }

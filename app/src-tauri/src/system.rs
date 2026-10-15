@@ -8,12 +8,15 @@ pub struct VideoDeviceInfo {
     pub name: String,
     pub display_name: String,
     pub stable_id: String,
+    pub infrared: bool,
 }
 
 #[derive(Deserialize)]
 struct CaptureCamera {
     id: String,
     model: String,
+    #[serde(default)]
+    infrared: bool,
     video_paths: Vec<String>,
 }
 
@@ -48,6 +51,12 @@ pub async fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
         let name = fs::read_to_string(format!("/sys/class/video4linux/{node}/name"))
             .map(|value| value.trim().to_string())
             .unwrap_or(camera.model);
+        // Shared-camera IR streams report the same V4L2 name as their color stream.
+        let name = if camera.infrared {
+            format!("{name} IR")
+        } else {
+            name
+        };
         let display_name = if node.is_empty() {
             name.clone()
         } else {
@@ -58,6 +67,7 @@ pub async fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
             name,
             display_name,
             stable_id,
+            infrared: camera.infrared,
         });
     }
     Ok(devices)

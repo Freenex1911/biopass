@@ -110,11 +110,13 @@ export function CameraPairSetting({
                 Saved camera disconnected
               </SelectItem>
             )}
-            {devices.map((d) => (
-              <SelectItem key={d.stable_id} value={d.stable_id}>
-                {d.display_name}
-              </SelectItem>
-            ))}
+            {devices
+              .filter((d) => ir || !d.infrared)
+              .map((d) => (
+                <SelectItem key={d.stable_id} value={d.stable_id}>
+                  {d.display_name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
         {pairErrors?.pairs?.[index]?.[field]?.message && (

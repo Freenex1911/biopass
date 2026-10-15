@@ -48,6 +48,9 @@ struct CameraDeviceInfo {
   std::string id;
   std::string model;
   std::vector<std::string> video_paths;
+  // An IR stream that shares its libcamera camera with a color stream; its
+  // id carries an "/ir" suffix and it is captured directly through V4L2.
+  bool infrared = false;
 };
 std::vector<CameraDeviceInfo> listCameraDevices();
 

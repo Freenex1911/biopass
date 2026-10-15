@@ -60,10 +60,11 @@ void print_formats(const std::string& device_path) {
   }
 }
 
-// Resolves a device selector to a /dev/video* path. Accepts a Linux path
-// directly, a bare index into listCameraDevices(), or a model substring.
+// Resolves a device selector to a /dev/video* path. Accepts a Linux path or a
+// libcamera:<id> selector directly, a bare index into listCameraDevices(), or
+// a model substring.
 std::string resolve_device_selector(const std::string& selector) {
-  if (selector.rfind("/dev/video", 0) == 0) {
+  if (selector.rfind("/dev/video", 0) == 0 || selector.rfind("libcamera:", 0) == 0) {
     return selector;
   }
 

@@ -23,6 +23,7 @@ export interface VideoDeviceInfo {
   name: string;
   display_name: string;
   stable_id: string;
+  infrared: boolean;
 }
 
 export interface CameraPairConfig {

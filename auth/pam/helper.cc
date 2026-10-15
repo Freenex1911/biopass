@@ -53,7 +53,7 @@ int listCameras() {
       std::cout << ',';
     first = false;
     std::cout << "{\"id\":" << jsonString(camera.id) << ",\"model\":" << jsonString(camera.model)
-              << ",\"video_paths\":[";
+              << ",\"infrared\":" << (camera.infrared ? "true" : "false") << ",\"video_paths\":[";
     for (size_t i = 0; i < camera.video_paths.size(); ++i) {
       if (i)
         std::cout << ',';
