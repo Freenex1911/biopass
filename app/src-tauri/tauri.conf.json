@@ -62,6 +62,7 @@
       "deb": {
         "depends": ["curl", "fprintd", "libwebkit2gtk-4.1-0", "libturbojpeg0"],
         "postInstallScript": "scripts/deb/postinst",
+        "preRemoveScript": "scripts/deb/prerm",
         "desktopTemplate": "scripts/biopass.desktop",
         "files": {
           "/usr/share/com.ticklab.biopass/download_models.sh": "scripts/download_models.sh",

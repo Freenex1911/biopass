@@ -1,0 +1,15 @@
+#!/bin/bash
+# prerm — Debian package pre-removal maintainer script.
+# Removes the PAM profile from the common-* files before the module is gone.
+
+set -e
+
+case "$1" in
+    remove|purge)
+        if command -v pam-auth-update >/dev/null 2>&1; then
+            pam-auth-update --package --remove biopass
+        fi
+        ;;
+esac
+
+exit 0

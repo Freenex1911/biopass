@@ -9,6 +9,12 @@ case "$1" in
         # Register the private biopass library directory with the dynamic linker.
         ldconfig
 
+        # Apply the current PAM profile. Respects whether the administrator
+        # enabled it; the profile itself is not enabled by default.
+        if command -v pam-auth-update >/dev/null 2>&1; then
+            pam-auth-update --package
+        fi
+
         # Run the model downloader for the installing user.
         # On a typical `sudo dpkg -i` install, SUDO_USER is set.
         SCRIPT="/usr/share/com.ticklab.biopass/download_models.sh"
