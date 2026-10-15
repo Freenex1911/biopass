@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BioPass",
+  "productName": "biopass",
   "identifier": "com.ticklab.biopass",
   "build": {
     "beforeDevCommand": "bun run dev",
