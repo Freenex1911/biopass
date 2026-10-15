@@ -23,7 +23,7 @@ ModelRegistry::ModelRegistry(const std::string& username) {
   const std::string db_path = getDbPath(username);
 
   if (sqlite3_open_v2(db_path.c_str(), &db_, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
-    spdlog::warn("Biopass: Failed to open model registry at {}: {}", db_path,
+    spdlog::warn("BioPass: Failed to open model registry at {}: {}", db_path,
                  db_ ? sqlite3_errmsg(db_) : "unknown error");
     if (db_) {
       sqlite3_close(db_);
@@ -48,7 +48,7 @@ std::optional<std::string> ModelRegistry::resolveModelPath(const std::string& mo
   sqlite3_stmt* stmt = nullptr;
   static const char* kQuery = "SELECT path FROM models WHERE id = ?1";
   if (sqlite3_prepare_v2(db_, kQuery, -1, &stmt, nullptr) != SQLITE_OK) {
-    spdlog::warn("Biopass: Failed to prepare model lookup query: {}", sqlite3_errmsg(db_));
+    spdlog::warn("BioPass: Failed to prepare model lookup query: {}", sqlite3_errmsg(db_));
     return std::nullopt;
   }
   sqlite3_bind_text(stmt, 1, model_id.c_str(), -1, SQLITE_TRANSIENT);
@@ -61,7 +61,7 @@ std::optional<std::string> ModelRegistry::resolveModelPath(const std::string& mo
       result = std::string(reinterpret_cast<const char*>(text));
     }
   } else if (rc != SQLITE_DONE) {
-    spdlog::warn("Biopass: Failed to query model '{}': {}", model_id, sqlite3_errmsg(db_));
+    spdlog::warn("BioPass: Failed to query model '{}': {}", model_id, sqlite3_errmsg(db_));
   }
 
   sqlite3_finalize(stmt);

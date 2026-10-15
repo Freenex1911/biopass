@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
   std::string crop_1_path = "result1.jpg";
   std::string crop_2_path = "result2.jpg";
 
-  CLI::App app("Compare two face images using Biopass face detection and recognition.");
+  CLI::App app("Compare two face images using BioPass face detection and recognition.");
   app.add_option("image1", image_1_path, "Path to the first image.")->required();
   app.add_option("image2", image_2_path, "Path to the second image.")->required();
   app.add_option("--det-model", detector_model, "Path to face detection ONNX model.");

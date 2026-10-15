@@ -17,7 +17,7 @@ AI-like issues or pull requests, including generic generated text, vague impact 
 
 ## 1. How to Run
 
-Biopass consists of a backend C++ authentication module and a frontend Tauri desktop application. You will need to install dependencies for both.
+BioPass consists of a backend C++ authentication module and a frontend Tauri desktop application. You will need to install dependencies for both.
 
 ### Install Dependencies
 
@@ -93,7 +93,7 @@ bun run tauri dev
 
 ## 3. Architecture and Flow
 
-The Biopass system is split into two primary layers: **The Backend Authentication Module** and the **Desktop UI Engine**.
+The BioPass system is split into two primary layers: **The Backend Authentication Module** and the **Desktop UI Engine**.
 
 ```mermaid
 sequenceDiagram

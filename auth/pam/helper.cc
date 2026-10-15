@@ -44,7 +44,7 @@ bool hasGraphicalSession(const std::string& username) {
   char** sessions = nullptr;
   const int count = sd_uid_get_sessions(pw->pw_uid, 0, &sessions);
   if (count < 0) {
-    spdlog::warn("Biopass: Could not query logind sessions: {}", strerror(-count));
+    spdlog::warn("BioPass: Could not query logind sessions: {}", strerror(-count));
     return true;
   }
   bool graphical = false;
@@ -377,7 +377,7 @@ int authenticate(const std::string& username, const std::string& service, int st
   if (config.strategy.password_on_first_login && isDisplayManagerLogin(service) &&
       !hasGraphicalSession(username)) {
     spdlog::debug(
-        "Biopass: First login via '{}' without a graphical session; deferring to password",
+        "BioPass: First login via '{}' without a graphical session; deferring to password",
         service);
     return 2;  // PAM_IGNORE
   }
@@ -428,7 +428,7 @@ int authenticate(const std::string& username, const std::string& service, int st
 }
 
 int main(int argc, char** argv) {
-  CLI::App app{"Biopass Helper Tool"};
+  CLI::App app{"BioPass Helper Tool"};
   app.set_version_flag("--version,-v", BIOPASS_VERSION);
   app.require_subcommand(1, 1);
 
@@ -470,7 +470,7 @@ int main(int argc, char** argv) {
   std::string username;
   std::string pamService;
   int statusFd = -1;
-  auto auth_cmd = app.add_subcommand("auth", "Authenticate a user with Biopass");
+  auto auth_cmd = app.add_subcommand("auth", "Authenticate a user with BioPass");
   auth_cmd->add_option("--username,-u", username, "Username for authentication")->required();
   auth_cmd->add_option("--status-fd", statusFd, "Private PAM status channel");
   auth_cmd->add_option("--service,-s", pamService, "PAM service name");

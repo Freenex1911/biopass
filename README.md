@@ -1,7 +1,7 @@
-# Biopass - An alternative to Howdy
+# BioPass - An alternative to Howdy
 
 <p align="center">
-    <img src="https://public-r2.ticklab.site/media/tc1oN21KXhMM1B2jOecRhk=" alt="Biopass Logo" width="120" />
+    <img src="https://public-r2.ticklab.site/media/tc1oN21KXhMM1B2jOecRhk=" alt="BioPass Logo" width="120" />
 </p>
 
 <p align="center">
@@ -20,13 +20,13 @@
 
 ---
 
-## Why Biopass?
+## Why BioPass?
 
-While Windows Hello provides a seamless multi-modal biometric experience (Face, Fingerprint, PIN) on Windows 11, Linux has historically lacked a modern, unified equivalent. Biopass was developed by [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) to fill that gap — see the comparison with [Howdy](https://github.com/boltgolt/howdy) below.
+While Windows Hello provides a seamless multi-modal biometric experience (Face, Fingerprint, PIN) on Windows 11, Linux has historically lacked a modern, unified equivalent. BioPass was developed by [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) to fill that gap — see the comparison with [Howdy](https://github.com/boltgolt/howdy) below.
 
 ## Comparison
 
-| Feature | [**Biopass**](https://github.com/TickLabVN/biopass) | [**Howdy**](https://github.com/boltgolt/howdy) |
+| Feature | [**BioPass**](https://github.com/TickLabVN/biopass) | [**Howdy**](https://github.com/boltgolt/howdy) |
 | :--- | :--- | :--- |
 | **Authentication methods** | Face + Fingerprint | Face only |
 | **User Interface** | Modern GUI for management | Command-line interface only |

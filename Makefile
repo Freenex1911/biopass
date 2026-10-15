@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-#  Biopass – Root Build Orchestrator
+#  BioPass – Root Build Orchestrator
 #
 #  Drives both sub-projects from the repository root:
 #    auth/  → C++ CMake PAM module + face/fingerprint/voice libs

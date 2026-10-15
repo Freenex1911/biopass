@@ -59,7 +59,7 @@ BiopassConfig readConfigFile(const std::string& config_path) {
     int schema_version = yaml["schema_version"] ? yaml["schema_version"].as<int>() : 0;
     if (schema_version != kCurrentSchemaVersion) {
       spdlog::warn(
-          "Biopass: config.yaml schema_version {} does not match expected {}, using defaults",
+          "BioPass: config.yaml schema_version {} does not match expected {}, using defaults",
           schema_version, kCurrentSchemaVersion);
       return config;
     }
@@ -208,9 +208,9 @@ BiopassConfig readConfigFile(const std::string& config_path) {
       config.appearance = yaml["appearance"].as<std::string>();
     }
   } catch (const YAML::BadFile& e) {
-    spdlog::warn("Biopass: Config file not found at {}, using defaults", config_path);
+    spdlog::warn("BioPass: Config file not found at {}, using defaults", config_path);
   } catch (const YAML::Exception& e) {
-    spdlog::error("Biopass: Failed to parse config: {}, using defaults", e.what());
+    spdlog::error("BioPass: Failed to parse config: {}, using defaults", e.what());
   }
 
   return config;
@@ -230,13 +230,13 @@ static int mkdir_p(const std::string& path) {
       continue;
     ret = mkdir(dir.c_str(), 0777);
     if (ret == -1 && errno != EEXIST) {
-      spdlog::error("Biopass: Failed to create directory '{}': {}", dir, strerror(errno));
+      spdlog::error("BioPass: Failed to create directory '{}': {}", dir, strerror(errno));
       return 1;
     }
   }
   ret = mkdir(path.c_str(), 0777);
   if (ret == -1 && errno != EEXIST) {
-    spdlog::error("Biopass: Failed to create directory '{}': {}", path, strerror(errno));
+    spdlog::error("BioPass: Failed to create directory '{}': {}", path, strerror(errno));
     return 1;
   }
   return 0;
@@ -285,7 +285,7 @@ void fixOwnership(const std::string& path, const std::string& username) {
     return;
   }
   if (chown(path.c_str(), pw->pw_uid, pw->pw_gid) != 0) {
-    spdlog::error("Biopass: Failed to chown '{}' to {}: {}", path, username, strerror(errno));
+    spdlog::error("BioPass: Failed to chown '{}' to {}: {}", path, username, strerror(errno));
   }
 }
 

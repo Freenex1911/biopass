@@ -2,15 +2,15 @@
 
 ## Debian/Ubuntu
 
-1. Verify the Biopass PAM profile exists:
+1. Verify the BioPass PAM profile exists:
     ```bash
     ls /usr/share/pam-configs/biopass
     ```
-2. Enable the Biopass PAM profile.
+2. Enable the BioPass PAM profile.
     ```bash
     sudo pam-auth-update
     ```
-3. Enable `Biopass` option. If `Fingerprint authentication` is selected, please disable it if you have enabled fingerprint auth in Biopass.
+3. Enable `BioPass face and fingerprint authentication`. If `Fingerprint authentication` is selected, please disable it if you have enabled fingerprint auth in BioPass.
 4. Test in a new terminal:
     ```bash
     sudo -k
@@ -39,7 +39,7 @@ Keep a root terminal open while testing. Incorrect PAM configuration can lock yo
     ```bash
     sudoedit /etc/pam.d/system-auth
     ```
-3. Insert Biopass before the existing `pam_unix.so` auth rule:
+3. Insert BioPass before the existing `pam_unix.so` auth rule:
     ```pam
     auth sufficient libbiopass_pam.so
     auth [success=1 default=ignore] pam_unix.so nullok

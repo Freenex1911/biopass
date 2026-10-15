@@ -1,5 +1,5 @@
 #!/bin/bash
-# download_models.sh — Downloads Biopass AI models to the user's data directory.
+# download_models.sh — Downloads BioPass AI models to the user's data directory.
 # This script is invoked by package installer hooks (RPM preinstall / Debian postinst).
 
 set -euo pipefail
@@ -44,11 +44,11 @@ escape_sed_replacement() {
 
 migrate_config_models() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Biopass: No existing config found at $CONFIG_FILE, skipping config migration."
+        echo "BioPass: No existing config found at $CONFIG_FILE, skipping config migration."
         return
     fi
 
-    echo "Biopass: Migrating model paths in $CONFIG_FILE"
+    echo "BioPass: Migrating model paths in $CONFIG_FILE"
     local escaped_data_dir
     escaped_data_dir="$(escape_sed_replacement "$DATA_DIR")"
 
@@ -72,21 +72,21 @@ remove_legacy_models() {
     for filename in "${LEGACY_MODELS[@]}"; do
         local old_model_path="${DATA_DIR}/${filename}"
         if [ -f "$old_model_path" ]; then
-            echo "Biopass: Removing legacy model $filename"
+            echo "BioPass: Removing legacy model $filename"
             rm -f "$old_model_path"
             removed=1
         fi
     done
 
     if [ "$removed" -eq 0 ]; then
-        echo "Biopass: No legacy models to remove."
+        echo "BioPass: No legacy models to remove."
     fi
 }
 
 migrate_config_models
 remove_legacy_models
 
-echo "Biopass: Ensuring model directory exists at $DATA_DIR"
+echo "BioPass: Ensuring model directory exists at $DATA_DIR"
 mkdir -p "$DATA_DIR"
 
 for entry in "${MODELS[@]}"; do
@@ -95,19 +95,19 @@ for entry in "${MODELS[@]}"; do
     dest="$DATA_DIR/$filename"
 
     if [ -f "$dest" ]; then
-        echo "Biopass: Model already present, skipping: $filename"
+        echo "BioPass: Model already present, skipping: $filename"
     else
-        echo "Biopass: Downloading $filename ..."
+        echo "BioPass: Downloading $filename ..."
         if curl -fL --retry 3 --retry-delay 2 -C - -o "$dest" "$url"; then
-            echo "Biopass: Downloaded $filename"
+            echo "BioPass: Downloaded $filename"
         else
-            echo "Biopass: WARNING — Failed to download $filename. The app may not function correctly until models are available." >&2
+            echo "BioPass: WARNING — Failed to download $filename. The app may not function correctly until models are available." >&2
             rm -f "$dest"  # Remove partial file
         fi
     fi
 done
 
-echo "Biopass: Model download complete."
+echo "BioPass: Model download complete."
 
 # Fix ownership back to the actual user if running under sudo
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then

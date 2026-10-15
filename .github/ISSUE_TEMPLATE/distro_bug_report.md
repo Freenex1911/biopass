@@ -17,7 +17,7 @@ Describe the bug in your own words.
 - Desktop environment:
 - Display manager:
 - Package source (`.deb`, `.rpm`, AUR, source build, other):
-- Biopass version:
+- BioPass version:
 
 ## Authentication path
 
