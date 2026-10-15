@@ -21,6 +21,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
+# The packages ship the build-tree binaries as-is. Keep their RUNPATH relative
+# ($ORIGIN) so installed copies resolve libraries through ld.so.conf instead
+# of an absolute, user-writable build directory (loaded as root by PAM).
+set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
 # Dependencies Configuration
 include(Dependencies.cmake)
 
