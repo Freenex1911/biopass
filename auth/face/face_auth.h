@@ -41,6 +41,10 @@ class FaceAuth : public IAuthMethod {
 
  private:
   void ensureIrSession();
+  // (Re)opens the color stream. For a shared-camera IR stream (see
+  // isSharedIrStream()) the two never run at the same time: this closes IR,
+  // and ensureIrSession() closes color.
+  void openColorSession() const;
   void prepareEnrolledFaces();
   // Loads the detection + recognition models once; returns false if either
   // model file is missing or fails to load.
@@ -49,9 +53,10 @@ class FaceAuth : public IAuthMethod {
 
   mutable FaceMethodConfig face_config_;
   mutable bool camera_pair_resolved_ = false;
+  mutable bool ir_shares_color_camera_ = false;
   ModelRegistry model_registry_;
   mutable std::unique_ptr<ICameraCaptureSession> camera_session_;
-  std::unique_ptr<ICameraCaptureSession> ir_camera_session_;
+  mutable std::unique_ptr<ICameraCaptureSession> ir_camera_session_;
   std::unique_ptr<FaceDetection> detector_;
   std::unique_ptr<FaceRecognition> recognizer_;
   std::unique_ptr<FaceAlignment> aligner_;

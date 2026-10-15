@@ -33,6 +33,11 @@ class ICameraCaptureSession {
 bool checkCameraAvailability(const std::optional<std::string>& device_path);
 // Checks enumeration only, without starting/stopping a capture stream.
 std::optional<std::string> resolveCameraSelector(const std::string& selector);
+// True when `ir_selector` is the shared-camera IR stream of `color_selector`
+// (see CameraDeviceInfo::infrared). Such webcams (e.g. Logitech BRIO) cannot
+// stream color and IR at the same time: color stalls while IR runs, and
+// starting color while IR runs resets the device.
+bool isSharedIrStream(const std::string& color_selector, const std::string& ir_selector);
 std::unique_ptr<ICameraCaptureSession> openCameraSession(
     const std::optional<std::string>& device_path,
     CameraCaptureFormat format = CameraCaptureFormat::Default, int warmup_frames = 5,

@@ -1017,6 +1017,12 @@ std::optional<std::string> resolveCameraSelector(const std::string& selector) {
   return "libcamera:" + camera->id();
 }
 
+bool isSharedIrStream(const std::string& color_selector, const std::string& ir_selector) {
+  const auto color = resolveCameraSelector(color_selector);
+  const auto ir = resolveCameraSelector(ir_selector);
+  return color && ir && *ir == *color + kIrStreamSuffix;
+}
+
 std::unique_ptr<ICameraCaptureSession> openCameraSession(
     const std::optional<std::string>& linux_video_device_path, CameraCaptureFormat format,
     int warmup_frames, int capture_timeout_ms) {

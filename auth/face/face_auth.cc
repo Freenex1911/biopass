@@ -26,21 +26,36 @@ bool FaceAuth::isAvailable() const {
     face_config_.anti_spoofing.ir_camera =
         pair->ir_camera.empty() ? std::nullopt : std::optional<std::string>{pair->ir_camera};
     camera_pair_resolved_ = true;
-    spdlog::debug("FaceAuth: Selected camera pair '{}' | RGB='{}' IR='{}'", pair->name,
-                  pair->camera, pair->ir_camera);
+    ir_shares_color_camera_ =
+        !pair->ir_camera.empty() && isSharedIrStream(pair->camera, pair->ir_camera);
+    spdlog::debug("FaceAuth: Selected camera pair '{}' | RGB='{}' IR='{}' shared={}", pair->name,
+                  pair->camera, pair->ir_camera, ir_shares_color_camera_);
   }
   // Keep the availability probe's stream for the authentication session.
   // Starting and immediately stopping a USB camera is expensive.
   if (!camera_session_ || !camera_session_->isOpen()) {
-    camera_session_ = openCameraSession(face_config_.camera);
+    openColorSession();
   }
   return camera_session_ && camera_session_->isOpen();
+}
+
+void FaceAuth::openColorSession() const {
+  if (ir_shares_color_camera_) {
+    ir_camera_session_.reset();
+  }
+  camera_session_.reset();
+  camera_session_ = openCameraSession(face_config_.camera);
 }
 
 void FaceAuth::ensureIrSession() {
   if (face_config_.anti_spoofing.ir_camera.has_value() &&
       !face_config_.anti_spoofing.ir_camera->empty() &&
       (!ir_camera_session_ || !ir_camera_session_->isOpen())) {
+    if (ir_shares_color_camera_) {
+      // The color frame for this attempt is already captured; the next
+      // attempt reopens color through openColorSession().
+      camera_session_.reset();
+    }
     ir_camera_session_ =
         openCameraSession(*face_config_.anti_spoofing.ir_camera, CameraCaptureFormat::V4L2Grey,
                           kIrCaptureWarmupFrames, kIrCaptureTimeoutMs);
@@ -122,9 +137,13 @@ bool FaceAuth::loadModels() {
 
 void FaceAuth::beginAuthenticationSession() {
   if (!camera_session_) {
-    camera_session_ = openCameraSession(face_config_.camera);
+    openColorSession();
   }
-  ensureIrSession();
+  // A shared-camera IR stream would stall the color stream; it is opened only
+  // for the anti-spoofing check.
+  if (!ir_shares_color_camera_) {
+    ensureIrSession();
+  }
   if (ensureModelsLoaded())
     prepareEnrolledFaces();
 }
@@ -150,7 +169,7 @@ AuthResult FaceAuth::authenticate(const std::string& username, const AuthConfig&
     return AuthResult::Unavailable;
   }
   if (!camera_session_) {
-    camera_session_ = openCameraSession(face_config_.camera);
+    openColorSession();
   }
   if (!camera_session_ || !camera_session_->isOpen()) {
     spdlog::error("FaceAuth: Could not open camera");
