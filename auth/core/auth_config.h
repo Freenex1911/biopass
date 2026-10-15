@@ -31,6 +31,9 @@ inline constexpr int kCurrentSchemaVersion = 2;
 struct StrategyConfig {
   bool debug = false;
   bool show_auth_status = false;
+  // On display-manager logins without a running graphical session, defer to
+  // the password so PAM can unlock the login keyring (see helper.cc).
+  bool password_on_first_login = true;
   std::string execution_mode = "parallel";
   std::vector<std::string> order = {"face", "fingerprint"};
   std::vector<std::string> ignore_services = {"polkit-1", "pkexec"};

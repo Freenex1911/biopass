@@ -24,7 +24,13 @@ Hints apply only to the `gdm-password` PAM service, when the caller permits info
 
 These messages improve feedback but do not replace GNOME's password field or add a face-authentication button. GNOME keeps a short informational message pending for at least two seconds from receipt. This overlaps authentication; only any remaining display time can delay completion of an unlock. Successful authentication does not enqueue an additional message.
 
-Keep the existing distinction between first login and unlocking an active session when the login keyring needs the password. BioPass does not change that policy or disable password authentication.
+## Password for the first sign-in
+
+The GNOME login keyring is encrypted with the account password. Face or fingerprint authentication provides no password, so a biometric first sign-in would leave the keyring locked.
+
+With **Password for the first sign-in** (`strategy.password_on_first_login`, enabled by default) the helper returns `PAM_IGNORE` for the display-manager services `gdm-password`, `sddm` and `lightdm` while the user has no graphical logind session. The display manager then asks for the password and unlocks the keyring. Lock screens use the same services but run inside the existing session, so they keep using biometrics. Other services such as `sudo` are not affected. If logind cannot be queried, biometrics stay available.
+
+Disable the option only if the login keyring has no password or is not used. BioPass never disables password authentication.
 
 ## Session-scoped inference
 

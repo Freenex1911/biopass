@@ -12,7 +12,8 @@
       "polkit-1",
       "pkexec"
     ],
-    "show_auth_status": true
+    "show_auth_status": true,
+    "password_on_first_login": false
   },
   "methods": {
     "face": {

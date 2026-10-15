@@ -17,6 +17,8 @@
     sudo true
     ```
 
+The profile also applies to the display manager. The first sign-in after boot still asks for the password so the login keyring can be unlocked; see [Password for the first sign-in](Authentication%20lifecycle.md#password-for-the-first-sign-in).
+
 ## Fedora/RHEL
 
 Fedora-based OS (Fedora, RHEL, CentOS, Rocky, Alma ...) use `authselect`, not `pam-auth-update`.

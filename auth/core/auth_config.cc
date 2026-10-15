@@ -71,6 +71,8 @@ BiopassConfig readConfigFile(const std::string& config_path) {
       const auto& s = yaml["strategy"];
       if (s["show_auth_status"])
         config.strategy.show_auth_status = s["show_auth_status"].as<bool>();
+      if (s["password_on_first_login"])
+        config.strategy.password_on_first_login = s["password_on_first_login"].as<bool>();
       if (s["debug"])
         config.strategy.debug = s["debug"].as<bool>();
       if (s["execution_mode"])

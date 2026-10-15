@@ -180,6 +180,27 @@ export function StrategyConfig() {
             }
           />
         </div>
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div className="grid gap-1">
+            <Label htmlFor="password-first-login">
+              Password for the first sign-in
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Ask for the password when signing in to a new desktop session, so
+              the login keyring is unlocked. The lock screen keeps using face
+              and fingerprint.
+            </p>
+          </div>
+          <Switch
+            id="password-first-login"
+            checked={strategyConfig.password_on_first_login}
+            onCheckedChange={(checked) =>
+              setValue("strategy.password_on_first_login", checked, {
+                shouldDirty: true,
+              })
+            }
+          />
+        </div>
         <details className="rounded-lg border p-4">
           <summary className="cursor-pointer text-sm font-medium">
             Troubleshooting & service exclusions

@@ -6,7 +6,7 @@
 #    app/   → Tauri desktop application
 #
 #  Prerequisites
-#    auth : cmake, ninja/make, libpam0g-dev, libcli11-dev, libturbojpeg0-dev
+#    auth : cmake, ninja/make, libpam0g-dev, libsystemd-dev, libcli11-dev, libturbojpeg0-dev
 #           (libcamera is built from source, pinned — see auth/BundleLibcamera.cmake;
 #            needs meson, ninja-build, python3-jinja2, python3-yaml, python3-ply, libudev-dev)
 #    app  : bun, rustup/cargo, tauri-cli v2, webkit2gtk, libssl-dev …

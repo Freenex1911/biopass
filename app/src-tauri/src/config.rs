@@ -26,6 +26,8 @@ pub struct StrategyConfig {
     pub debug: bool,
     #[serde(default)]
     pub show_auth_status: bool,
+    #[serde(default = "default_true")]
+    pub password_on_first_login: bool,
     pub execution_mode: String,
     pub order: Vec<String>,
     pub ignore_services: Vec<String>,
@@ -151,6 +153,10 @@ pub struct FingerprintMethodConfig {
 const DEFAULT_IR_WARMUP_DELAY_MS: i32 = 300;
 const DEFAULT_IR_PRESENCE_TIMEOUT_MS: i32 = 1500;
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_ignored_services() -> Vec<String> {
     vec!["polkit-1".to_string(), "pkexec".to_string()]
 }
@@ -161,6 +167,7 @@ fn get_default_config() -> BiopassConfig {
         strategy: StrategyConfig {
             debug: false,
             show_auth_status: false,
+            password_on_first_login: true,
             execution_mode: "parallel".to_string(),
             order: vec!["face".to_string(), "fingerprint".to_string()],
             ignore_services: default_ignored_services(),
@@ -345,6 +352,12 @@ mod tests {
             let mut expected: serde_json::Value = serde_json::from_str(content).unwrap();
             if expected["strategy"].get("show_auth_status").is_none() {
                 expected["strategy"]["show_auth_status"] = false.into();
+            }
+            if expected["strategy"]
+                .get("password_on_first_login")
+                .is_none()
+            {
+                expected["strategy"]["password_on_first_login"] = true.into();
             }
             if expected["methods"]["face"]
                 .get("camera_selection")

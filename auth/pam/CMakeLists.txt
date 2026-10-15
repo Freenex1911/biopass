@@ -27,7 +27,11 @@ target_include_directories(biopass-helper PRIVATE
     ${CMAKE_SOURCE_DIR}/fingerprint
 )
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
+
 target_link_libraries(biopass-helper
+    PkgConfig::SYSTEMD
     ${ONNXRUNTIME_LIB}
     biopass_core
     biopass_face

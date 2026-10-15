@@ -13,6 +13,7 @@ export const biopassConfigSchema = z.object({
   strategy: z.object({
     debug: z.boolean(),
     show_auth_status: z.boolean(),
+    password_on_first_login: z.boolean(),
     execution_mode: z.enum(["sequential", "parallel"]),
     order: z.array(z.string()),
     ignore_services: z.array(z.string()),

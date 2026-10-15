@@ -1,8 +1,10 @@
+#include <pwd.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <systemd/sd-login.h>
 
 #include <CLI/CLI.hpp>
 #include <algorithm>
@@ -24,6 +26,44 @@ using biopass::Detection;
 using biopass::FaceDetection;
 
 namespace {
+
+// Display-manager PAM services whose first login unlocks the login keyring
+// with the typed password. Their lock screens use the same services.
+bool isDisplayManagerLogin(const std::string& service) {
+  return service == "gdm-password" || service == "sddm" || service == "lightdm";
+}
+
+// Whether `username` already has a graphical session (a lock screen rather
+// than a first login). Assumes one when logind cannot answer, keeping
+// biometric authentication available as before.
+bool hasGraphicalSession(const std::string& username) {
+  const struct passwd* pw = getpwnam(username.c_str());
+  if (pw == nullptr) {
+    return true;
+  }
+  char** sessions = nullptr;
+  const int count = sd_uid_get_sessions(pw->pw_uid, 0, &sessions);
+  if (count < 0) {
+    spdlog::warn("Biopass: Could not query logind sessions: {}", strerror(-count));
+    return true;
+  }
+  bool graphical = false;
+  for (int i = 0; i < count; ++i) {
+    char* type = nullptr;
+    char* state = nullptr;
+    if (sd_session_get_type(sessions[i], &type) >= 0 &&
+        sd_session_get_state(sessions[i], &state) >= 0 &&
+        (strcmp(type, "wayland") == 0 || strcmp(type, "x11") == 0 || strcmp(type, "mir") == 0) &&
+        strcmp(state, "closing") != 0) {
+      graphical = true;
+    }
+    free(type);
+    free(state);
+    free(sessions[i]);
+  }
+  free(sessions);
+  return graphical;
+}
 
 std::string jsonString(const std::string& value) {
   std::string result = "\"";
@@ -331,6 +371,16 @@ int authenticate(const std::string& username, const std::string& service, int st
   }
 
   setupBiopassLogger(pUsername, config.strategy.debug);
+
+  // The login keyring is encrypted with the password and biometrics provide
+  // none, so a biometric first login leaves the keyring locked.
+  if (config.strategy.password_on_first_login && isDisplayManagerLogin(service) &&
+      !hasGraphicalSession(username)) {
+    spdlog::debug(
+        "Biopass: First login via '{}' without a graphical session; deferring to password",
+        service);
+    return 2;  // PAM_IGNORE
+  }
 
   biopass::AuthConfig runtime_config;
   runtime_config.debug = config.strategy.debug;

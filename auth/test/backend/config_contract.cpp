@@ -19,6 +19,9 @@ int main(int argc, char** argv) {
   require(actual.strategy.debug == strategy["debug"].as<bool>());
   require(actual.strategy.show_auth_status ==
           (strategy["show_auth_status"] ? strategy["show_auth_status"].as<bool>() : false));
+  require(actual.strategy.password_on_first_login ==
+          (strategy["password_on_first_login"] ? strategy["password_on_first_login"].as<bool>()
+                                               : true));
   require(actual.strategy.execution_mode == strategy["execution_mode"].as<std::string>());
   require(actual.strategy.order == strategy["order"].as<std::vector<std::string>>());
   require(actual.strategy.ignore_services ==
