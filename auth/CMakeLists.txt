@@ -22,9 +22,15 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 # The packages ship the build-tree binaries as-is. Keep their RUNPATH relative
-# ($ORIGIN) so installed copies resolve libraries through ld.so.conf instead
-# of an absolute, user-writable build directory (loaded as root by PAM).
+# ($ORIGIN) instead of pointing at the absolute, user-writable build directory
+# (loaded as root by PAM).
 set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+# Installed copies find their private libraries in /usr/lib/biopass, so the
+# package needs no global ld.so.conf entry (which would shadow the
+# distribution's libcamera). Passed as a link item rather than through
+# CMAKE_BUILD_RPATH so it follows the $ORIGIN entries and build-tree binaries
+# keep using the build tree.
+link_libraries("-Wl,-rpath,/usr/lib/biopass")
 # Dependencies Configuration
 include(Dependencies.cmake)
 

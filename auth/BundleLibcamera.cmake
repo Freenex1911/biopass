@@ -12,7 +12,12 @@
 include(ExternalProject)
 
 set(LIBCAMERA_VERSION "v0.7.0")
-set(LIBCAMERA_STAGING "${CMAKE_BINARY_DIR}/libcamera")
+# libcamera compiles its prefix into the library (IPA modules, IPA proxies,
+# configuration). Use the root-owned installed location, never the build
+# directory: the PAM helper runs as root. The build stages it via DESTDIR.
+set(LIBCAMERA_PREFIX  "/usr/lib/biopass/libcamera")
+set(LIBCAMERA_DESTDIR "${CMAKE_BINARY_DIR}/libcamera-destdir")
+set(LIBCAMERA_STAGING "${LIBCAMERA_DESTDIR}${LIBCAMERA_PREFIX}")
 set(LIBCAMERA_SODIR   "${LIBCAMERA_STAGING}/lib")
 # libcamera installs headers to <prefix>/include/libcamera/libcamera/*.h.
 set(LIBCAMERA_INCDIR  "${LIBCAMERA_STAGING}/include/libcamera")
@@ -22,13 +27,13 @@ ExternalProject_Add(libcamera_ext
     GIT_REPOSITORY https://git.libcamera.org/libcamera/libcamera.git
     GIT_TAG        ${LIBCAMERA_VERSION}
     GIT_SHALLOW    TRUE
-    CONFIGURE_COMMAND meson setup --prefix=${LIBCAMERA_STAGING} --libdir=lib --buildtype=release
+    CONFIGURE_COMMAND meson setup --prefix=${LIBCAMERA_PREFIX} --libdir=lib --buildtype=release
         -Dpipelines=uvcvideo -Dipas=[] -Dgstreamer=disabled -Dv4l2=disabled
         -Dcam=disabled -Dqcam=disabled -Dlc-compliance=disabled
         -Dtracing=disabled -Ddocumentation=disabled -Dpycamera=disabled -Dtest=false -Dudev=enabled
         <BINARY_DIR> <SOURCE_DIR>
     BUILD_COMMAND   ninja -C <BINARY_DIR>
-    INSTALL_COMMAND ninja -C <BINARY_DIR> install
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E env DESTDIR=${LIBCAMERA_DESTDIR} ninja -C <BINARY_DIR> install
     BUILD_BYPRODUCTS ${LIBCAMERA_SODIR}/libcamera.so ${LIBCAMERA_SODIR}/libcamera-base.so
 )
 

@@ -6,7 +6,8 @@ set -e
 
 case "$1" in
     configure)
-        # Register the private biopass library directory with the dynamic linker.
+        # Refresh the linker cache; older packages registered /usr/lib/biopass
+        # globally through /etc/ld.so.conf.d/biopass.conf.
         ldconfig
 
         # Apply the current PAM profile. Respects whether the administrator

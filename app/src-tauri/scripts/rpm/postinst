@@ -4,7 +4,8 @@
 
 set -e
 
-# Refresh linker cache after installing the private BioPass library path.
+# Refresh the linker cache; older packages registered /usr/lib/biopass
+# globally through /etc/ld.so.conf.d/biopass.conf.
 ldconfig
 
 # Run the model downloader for the installing user.
