@@ -17,8 +17,12 @@ message(STATUS "Project version: ${PROJECT_VERSION}")
 set(CMAKE_CXX_STANDARD          17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-# Avoid RPATH warnings about shadowed libraries in non-system directories
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+# No CMake install RUNPATH: whenever it is longer than the build RUNPATH, CMake
+# pads the build RUNPATH with ':' placeholders, i.e. empty entries, which the
+# loader treats as the current directory -- here the caller's directory of a
+# root PAM helper. /usr/lib/biopass is added as a linker flag below instead,
+# and biopass_clean_runpath() removes any empty entry CMake still emits.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 # The packages ship the build-tree binaries as-is. Keep their RUNPATH relative
@@ -31,6 +35,16 @@ set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
 # CMAKE_BUILD_RPATH so it follows the $ORIGIN entries and build-tree binaries
 # keep using the build tree.
 link_libraries("-Wl,-rpath,/usr/lib/biopass")
+# Strips empty RUNPATH entries from the binaries the packages ship; called in
+# the directory that defines each target.
+set(BIOPASS_CLEAN_RUNPATH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/CleanRunpath.cmake")
+function(biopass_clean_runpath)
+  foreach(target IN LISTS ARGN)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -DFILE=$<TARGET_FILE:${target}> -P ${BIOPASS_CLEAN_RUNPATH_SCRIPT}
+      VERBATIM)
+  endforeach()
+endfunction()
 # Dependencies Configuration
 include(Dependencies.cmake)
 

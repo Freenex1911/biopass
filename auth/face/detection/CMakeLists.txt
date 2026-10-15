@@ -15,3 +15,5 @@ target_link_libraries(biopass_det PRIVATE
     biopass_stb
     biopass_onnx
 )
+
+biopass_clean_runpath(biopass_det)

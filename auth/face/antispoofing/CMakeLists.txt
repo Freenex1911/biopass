@@ -23,3 +23,5 @@ target_link_libraries(biopass_as PRIVATE
     biopass_face_common
     spdlog::spdlog_header_only
 )
+
+biopass_clean_runpath(biopass_as)

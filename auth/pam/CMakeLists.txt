@@ -39,5 +39,7 @@ target_link_libraries(biopass-helper
     spdlog::spdlog_header_only
 )
 
+biopass_clean_runpath(${PAM} biopass-helper)
+
 # Install rules
 install(TARGETS biopass-helper RUNTIME DESTINATION "/usr/bin")
